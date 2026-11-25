@@ -1,10 +1,68 @@
-# Crawlspace
+<p align="center">
+  <a href="https://mattblack.space/skills/crawlspace/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/readme/logo-dark.svg" />
+      <img src=".github/readme/logo-light.svg" alt="Crawlspace" width="340" />
+    </picture>
+  </a>
+</p>
 
-A Claude Code plugin for SEO audits that look where crawlers look: the HTML a
-site really serves, and the code that serves it.
+<h3 align="center">SEO audits that show their evidence.</h3>
 
-**See it at [mattblack.space/skills/crawlspace](https://mattblack.space/skills/crawlspace/)**,
-run on the example site Harbor.
+<p align="center">
+  A Claude Code plugin that audits a site against the HTML its server really sends and the code that sends it.<br />
+  Graded findings, a launch checklist, previews of every shared link, and fixes when you ask. No paid tools or API keys.
+</p>
+
+<p align="center">
+  <a href="https://mattblack.space/skills/crawlspace/"><b>Website</b></a> ·
+  <a href="#install">Install</a> ·
+  <a href="#skills">Skills</a> ·
+  <a href="#the-checker">The checker</a> ·
+  <a href="skills/audit/checklist.md">Audit checklist</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-1F1A14" /></a>
+  <a href="CHANGELOG.md"><img alt="Version 2.0.0" src="https://img.shields.io/badge/version-2.0.0-1F1A14" /></a>
+  <a href="https://github.com/mtblck/claude-marketplace"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude_Code-plugin-1F1A14" /></a>
+  <a href="#the-checker"><img alt="Checker: Node 18+, zero dependencies" src="https://img.shields.io/badge/checker-zero_dependencies-1F1A14" /></a>
+  <a href="https://mattblack.space/skills/crawlspace/"><img alt="Live at mattblack.space" src="https://img.shields.io/badge/live-mattblack.space-9C4A0C" /></a>
+</p>
+
+<p align="center">
+  <a href="https://mattblack.space/skills/crawlspace/#how">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/readme/hero-dark.webp" />
+      <img src=".github/readme/hero-light.webp" alt="Two score gauges: Harbor, before, at 55 with 39 P2 and 44 P3 findings, an arrow, and 100 after the fixes with none" width="560" />
+    </picture>
+  </a>
+</p>
+<p align="center"><sub>Harbor, a made-up six-page app, audited as a client-rendered site and again after its fixes. <a href="https://mattblack.space/skills/crawlspace/#how">See the whole run</a>.</sub></p>
+
+## What it does
+
+Ask Claude to check a site's SEO and you usually get general tips that could describe any site.
+Crawlspace finds the problems this site actually has and proves each one: the URL, what the server
+sent, and the line of code that caused it.
+
+It fetches every page the way a crawler does and again in a real browser, compares the two, and
+reads the repo that made them. That catches what single-page apps get wrong: one title on every
+page, an empty shell where the content should be, made-up URLs that answer 200, share cards nobody
+can see. Every finding is verified before it is graded **P1** (blocks indexing), **P2** (costs
+visibility or clicks) or **P3** (polish). Nothing changes unless you ask for fixes.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/findings-dark.webp" />
+    <img src=".github/readme/findings-light.webp" alt="Harbor's audit at 55/100: nine P2 findings, each with its check id, what was found and how many pages it affects, such as render.content-js-only: the raw HTML has 0 words, the rendered page has 202" width="680" />
+  </picture>
+</p>
+
+Built for Vite and React single-page apps and Next.js on Vercel, and works on any site. In
+Claude's cloud sandbox, where the live site is often out of reach, it audits a local production
+build instead and says which checks that skips.
 
 ## Install
 
@@ -21,8 +79,8 @@ Or add the marketplace first, which works on older versions too:
 /plugin install crawlspace@crawlspace
 ```
 
-To have it in every session on a repo (including Claude Code on the web), add
-this to the repo's `.claude/settings.json`:
+To have it in every session on a repo (including Claude Code on the web and the Claude GitHub
+Action), commit this as the repo's `.claude/settings.json`:
 
 ```json
 {
@@ -33,15 +91,11 @@ this to the repo's `.claude/settings.json`:
 }
 ```
 
-It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-marketplace)
-as `crawlspace@mtblck`. Until 2.0.0 it lived there as the `seo` plugin, so
-`/seo:audit` is now `/crawlspace:audit`.
+It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-marketplace) as
+`crawlspace@mtblck`. Until 2.0.0 it lived there as the `seo` plugin, so `/seo:audit` is now
+`/crawlspace:audit`.
 
-## Use
-
-Built for Vite/React single-page apps and Next.js on Vercel, and works on any
-site: every finding comes with evidence from the served HTML and
-the place in the code that causes it.
+## Skills
 
 | Skill | Use it for |
 | --- | --- |
@@ -52,12 +106,14 @@ the place in the code that causes it.
 | `/crawlspace:keywords [url \| topic] [competitors]` | Keyword research without paid tools: queries from the site, search results, People Also Ask, forums and Search Console data, one primary query per page, cannibalisation and gaps, `keywords.md` and a CSV. |
 | `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, each call labelled documented or judgement. |
 
-Claude also picks them up from their descriptions ("why isn't this page indexed?").
+Claude also picks them up from their descriptions: "why isn't this page indexed?", "check how this
+link looks on Slack".
 
 ## The checker
 
-`scripts/seo-check.mjs` is the evidence collector the skills share. Node 18+, no
-dependencies; renders pages with Playwright when it's installed.
+`scripts/seo-check.mjs` is the evidence collector the skills share. It needs Node 18 or newer and
+nothing else, and renders pages with Playwright when Playwright is already installed. It only sends
+GET requests to the site it's pointed at.
 
 ```
 node scripts/seo-check.mjs --url https://example.com --max 30 --md seo.md --json seo.json
@@ -70,32 +126,49 @@ AI search fetchers, training crawlers and control tokens), the sitemap or sitema
 index, and an even sample of sitemap URLs (or a crawl from the home page), then
 checks status codes, redirects, noindex in sitemaps, titles and descriptions
 (missing, length, duplicates), canonicals and their targets, `lang`, viewport,
-headings, images, JSON-LD parsing, Open Graph and Twitter card tags (and fetches each share image to check its status, type, file size, pixel size and ratio), mixed content, hreflang codes and
-return links, internal link status, favicons, apple-touch-icon, manifest and theme-color, soft 404s, http → https and www/apex
-consolidation (live sites only), and what only appears after JavaScript runs.
-Exit 1 when there's a P1, so it can gate a deploy. It only sends GET requests to
-the site it's pointed at.
+headings, images, JSON-LD parsing, Open Graph and Twitter card tags (fetching each share
+image to check its status, type, file size, pixel size and ratio), mixed content, hreflang
+codes and return links, internal link status, favicons, apple-touch-icon, manifest and
+theme-color, soft 404s, http → https and www/apex consolidation (live sites only), and what only appears after JavaScript runs.
+It exits 1 when there's a P1, so it can gate a deploy.
 
 The score deducts once per kind of problem (P1 12, P2 4, P3 1). It's a gauge for
 comparing runs, not a ranking prediction.
 
-`scripts/social-preview.mjs --url <page> [--url ...] --out <dir>` draws how each
-page unfurls on Slack, Facebook, X, LinkedIn and iMessage (HTML, plus a PNG with
-Playwright), from the served HTML only, the way the scrapers see it. The layouts
-are close approximations, not pixel copies.
+### Link previews
 
-`scripts/checklist.mjs --from seo.json --out <dir>` turns a checker run into an
-interactive launch checklist (`templates/checklist.html` plus `checklist.json`):
-fixes grouped by priority, the set-up-once steps, ticks, dates and notes, and
-"Copy as Markdown". Published as an Artifact, ticks save into the page; re-runs
-carry ticks over and move fixed items to their own section.
+`scripts/social-preview.mjs --url <page> [--url ...] --out <dir>` draws how each page unfurls on
+Slack, Facebook, X, LinkedIn and iMessage (HTML, plus a PNG with Playwright), from the served HTML
+only, the way the scrapers see it. The layouts are close approximations, not pixel copies.
 
-Test: `node --test "scripts/test/*.test.mjs"` (serves a fixture site
-with planted problems on localhost).
+<p align="center">
+  <img src=".github/readme/previews.webp" alt="Link previews for Harbor's blog post on Slack, Facebook, X, LinkedIn and iMessage, each with its title, description and the Harbor share image" width="560" />
+</p>
 
-In Claude's cloud sandbox the network policy may block the live site; the skills
-then audit a local production build, and on Vercel can read the deployment through
-the Vercel connector.
+### Launch checklist
+
+`scripts/checklist.mjs --from seo.json --out <dir>` turns a checker run into an interactive launch
+checklist (`templates/checklist.html` plus `checklist.json`): fixes grouped by priority, the
+set-up-once steps, ticks, dates and notes, and "Copy as Markdown". Published as an Artifact, ticks
+save into the page; re-runs carry ticks over and move fixed items to their own section.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/checklist-dark.webp" />
+    <img src=".github/readme/checklist-light.webp" alt="Harbor launch checklist, 2 of 29 done: under Fix soon, P2 items such as Prerender the public pages and Give each page its own title, each with the pages it affects and a note" width="560" />
+  </picture>
+</p>
+
+## How the repo is laid out
+
+```
+skills/      audit, page, schema, social, keywords, ai-search (each a SKILL.md)
+scripts/     seo-check.mjs (the checker), social-preview.mjs, checklist.mjs, lib/, test/
+templates/   checklist.html and an example checklist.json
+```
+
+Test the checker with `node --test "scripts/test/*.test.mjs"`: it serves a fixture site with
+planted problems on localhost. CI runs that and `claude plugin validate .` on every pull request.
 
 ## Prior art
 
@@ -111,3 +184,11 @@ copied; the ideas taken are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTIC
 | [inhouseseo/superseo-skills](https://github.com/inhouseseo/superseo-skills) `page-audit` | Apache-2.0 | Single-page review against the live top results; never infer what an unread competitor page says | Content-writing and link-building skills |
 | [zubair-trabzada/geo-seo-claude](https://github.com/zubair-trabzada/geo-seo-claude) | MIT | AI crawler tiers (search vs training) | Agency sales features (prospects, proposals, CRM); unsourced statistics |
 | [JeffLi1993/seo-audit-skill](https://github.com/JeffLi1993/seo-audit-skill) | MIT | (nothing new) | Lighter subset of the above |
+
+## Changelog
+
+What changed in each release is in [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+[MIT](LICENSE) © Matt Black
