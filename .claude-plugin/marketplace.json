@@ -1,0 +1,18 @@
+{
+  "name": "crawlspace",
+  "owner": {
+    "name": "mtblck",
+    "url": "https://github.com/mtblck"
+  },
+  "metadata": {
+    "description": "Crawlspace: SEO audits measured against the HTML a site really serves and the code that serves it."
+  },
+  "plugins": [
+    {
+      "name": "crawlspace",
+      "source": "./",
+      "description": "audit (full SEO audit with a bundled zero-dependency checker, graded findings and a launch checklist), page, schema, social (cards and link previews), ai-search and keywords.",
+      "category": "development"
+    }
+  ]
+}
