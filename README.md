@@ -130,7 +130,7 @@ AI search fetchers, training crawlers and control tokens), the sitemap or sitema
 index, and an even sample of sitemap URLs (or a crawl from the home page), then
 checks status codes, redirects, noindex in sitemaps, titles and descriptions
 (missing, length, duplicates), canonicals and their targets, `lang`, viewport,
-headings, images, JSON-LD parsing, Open Graph and Twitter card tags (fetching each share
+headings, images (alt text, size attributes, and for same-site images their weight, format, `srcset` and a lazy-loaded first image), JSON-LD parsing, Open Graph and Twitter card tags (fetching each share
 image to check its status, type, file size, pixel size and ratio), mixed content, hreflang
 codes and return links, internal link status, favicons, apple-touch-icon, manifest and
 theme-color, soft 404s, http → https and www/apex consolidation (live sites only), and what only appears after JavaScript runs.

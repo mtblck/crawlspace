@@ -43,6 +43,7 @@ if (argv.includes('--help') || argv.includes('-h') || !opt('url')) {
   --pages LIST      comma-separated paths or URLs to always include
   --render MODE     auto (default: render with Playwright when installed), on, off
   --max-links N     internal links to status-check (default 150, 0 to skip)
+  --max-images N    same-site images to download and measure (default 150, 0 to skip)
   --crawl N         follow internal links from the home page up to N pages to
                     measure click depth and find orphan sitemap URLs (default 0: off)
   --json FILE       write the full result as JSON
@@ -95,6 +96,7 @@ if (opt('baseline')) {
 const BASE_PATHS = baseline ? baselinePaths(baseline) : []
 const MAX = Math.max(Number(opt('max', 25)), BASE_PATHS.length + 1)
 const MAX_LINKS = Number(opt('max-links', 150))
+const MAX_IMAGES = Number(opt('max-images', 150))
 const CRAWL = Number(opt('crawl', 0))
 const RENDER = String(opt('render', 'auto'))
 const TIMEOUT = Number(opt('timeout', 15000))
@@ -222,7 +224,14 @@ function extract(html, pageUrl) {
     const a = attrs(m[1])
     return { href: a.href ?? null, abs: a.href ? abs(a.href) : null, rel: a.rel || '', text: squash(m[2]).slice(0, 80) }
   })
-  const images = tags(body, 'img').map((a) => ({ src: a.src || a['data-src'] || '', alt: 'alt' in a ? a.alt : null, width: a.width, height: a.height, role: a.role, hidden: 'aria-hidden' in a }))
+  const images = tags(body, 'img').map((a) => ({ src: a.src || a['data-src'] || '', abs: a.src || a['data-src'] ? abs(a.src || a['data-src']) : null, alt: 'alt' in a ? a.alt : null, width: a.width, height: a.height, role: a.role, hidden: 'aria-hidden' in a, loading: (a.loading || '').toLowerCase() || null, srcset: !!(a.srcset || a['data-srcset']), inPicture: false }))
+  // <picture><source srcset> counts as responsive for the <img> inside it
+  for (const m of body.matchAll(/<picture\b[\s\S]*?<\/picture\s*>/gi)) {
+    if (!/<source\b[^>]*srcset/i.test(m[0])) continue
+    const inner = tags(m[0], 'img')[0]
+    const hit = inner && images.find((i) => i.src === (inner.src || inner['data-src'] || '') && !i.srcset && !i.inPicture)
+    if (hit) hit.inPicture = true
+  }
   const mixed = /^https:/.test(pageUrl)
     ? [...clean.matchAll(/<(?:img|script|link|iframe|source|video|audio)\b[^>]*\s(?:src|href)\s*=\s*["']?(http:\/\/[^"'\s>]+)/gi)].map((m) => m[1])
     : []
@@ -530,6 +539,45 @@ async function main() {
   // per-page checks
   const titles = new Map()
   const imageCache = new Map()
+  let imagesFetched = 0
+  const imageStats = { measured: 0, otherHost: 0, skipped: 0 }
+  // Weight, format and responsiveness of the page's own images, plus the likely
+  // LCP image being lazy-loaded. Only same-site images are downloaded.
+  async function checkImages(images, pageUrl) {
+    const visible = images.filter((i) => i.abs && !i.hidden && !/^data:/i.test(i.src))
+    const first = visible[0]
+    if (first && first.loading === 'lazy' && !(Number(first.width) && Number(first.width) < 100))
+      add('P2', 'img.lcp-lazy', `The first image on the page (${first.src.slice(0, 80)}) has loading="lazy". If it's the largest thing above the fold (the LCP element), lazy-loading delays it; load it eagerly, with fetchpriority="high".`, pageUrl)
+    const heavy = []
+    const legacy = []
+    const fixedWide = []
+    for (const i of visible.slice(0, 12)) {
+      if (!sameSite(i.abs)) {
+        imageStats.otherHost++
+        continue
+      }
+      if (!imageCache.has(i.abs)) {
+        if (imagesFetched >= MAX_IMAGES) {
+          imageStats.skipped++
+          continue
+        }
+        imagesFetched++
+        imageCache.set(i.abs, await fetchImage(i.abs, { ua: UA, timeout: TIMEOUT }))
+      }
+      const img = imageCache.get(i.abs)
+      if (!img || img.status !== 200) continue
+      imageStats.measured++
+      const kb = Math.round(img.bytes / 1024)
+      const svg = /svg/i.test(img.type)
+      if (!svg && img.bytes > 200 * 1024) heavy.push({ src: i.src, kb })
+      if (/jpe?g|png|gif|bmp/i.test(img.type) && img.bytes > 100 * 1024) legacy.push({ src: i.src, kb, type: img.type.split(';')[0] })
+      if (!svg && img.size?.width >= 1000 && !i.srcset && !i.inPicture) fixedWide.push({ src: i.src, w: img.size.width })
+    }
+    const ex = (xs, f) => xs.slice(0, 3).map(f).join(', ') + (xs.length > 3 ? ' …' : '')
+    if (heavy.length) add(heavy.some((h) => h.kb > 1024) ? 'P2' : 'P3', 'img.heavy', `${heavy.length} image(s) over 200 KB: ${ex(heavy.sort((a, b) => b.kb - a.kb), (h) => `${h.src.slice(0, 60)} (${h.kb} KB)`)}. Compress or resize them.`, pageUrl)
+    if (legacy.length) add('P3', 'img.format', `${legacy.length} JPEG/PNG/GIF image(s) over 100 KB: ${ex(legacy, (h) => `${h.src.slice(0, 60)} (${h.type}, ${h.kb} KB)`)}. WebP or AVIF is usually far smaller at the same quality.`, pageUrl)
+    if (fixedWide.length) add('P3', 'img.srcset', `${fixedWide.length} image(s) at least 1000 px wide with no srcset or <picture>: ${ex(fixedWide, (h) => `${h.src.slice(0, 60)} (${h.w} px)`)}. Phones download the full size.`, pageUrl)
+  }
   const descs = new Map()
   const byUrl = new Map(results.map((p) => [p.finalUrl, p]))
   for (const p of results) {
@@ -619,6 +667,7 @@ async function main() {
     if (noAlt.length) add('P2', 'img.alt', `${noAlt.length} image(s) without an alt attribute (e.g. ${noAlt[0].src.slice(0, 80)}).`, p.url)
     const noDim = view.images.filter((i) => !i.width || !i.height)
     if (noDim.length) add('P3', 'img.dimensions', `${noDim.length} image(s) without width and height (layout shift).`, p.url)
+    await checkImages(view.images, p.url)
 
     const ld = [...d.jsonld, ...(r?.jsonld || [])]
     for (const j of ld.filter((j) => !j.ok)) add('P1', 'jsonld.invalid', `JSON-LD block does not parse: ${j.error}.`, p.url)
@@ -798,6 +847,7 @@ async function main() {
     icons: iconInfo,
     pages: pagesOut,
     linksChecked: checkedLinks,
+    images: imageStats,
     redirects,
     linksUnreachable: unreachable,
     crawl: graph,
