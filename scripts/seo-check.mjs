@@ -22,6 +22,7 @@ import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { parseSocial, fetchImage, socialFindings } from './lib/social.mjs'
+import { nodes as ldNodes, commerceFindings, phones } from './lib/commerce.mjs'
 import { parseRedirectList, gradeRedirect } from './lib/redirects.mjs'
 import { baselinePaths, compareRuns, validBaseline } from './lib/drift.mjs'
 
@@ -190,7 +191,7 @@ function extract(html, pageUrl) {
         }
       }
       walk(data)
-      jsonld.push({ ok: true, types: [...types] })
+      jsonld.push({ ok: true, types: [...types], nodes: ldNodes(data) })
     } catch (e) {
       jsonld.push({ ok: false, error: e.message.slice(0, 120) })
     }
@@ -530,6 +531,7 @@ async function main() {
   // per-page checks
   const titles = new Map()
   const imageCache = new Map()
+  const sitePhones = new Map() // phone digits -> pages showing it
   const descs = new Map()
   const byUrl = new Map(results.map((p) => [p.finalUrl, p]))
   for (const p of results) {
@@ -623,6 +625,9 @@ async function main() {
     const ld = [...d.jsonld, ...(r?.jsonld || [])]
     for (const j of ld.filter((j) => !j.ok)) add('P1', 'jsonld.invalid', `JSON-LD block does not parse: ${j.error}.`, p.url)
     p.schemaTypes = [...new Set(ld.flatMap((j) => j.types || []))]
+    const ldAll = ld.flatMap((j) => j.nodes || [])
+    for (const f of commerceFindings(ldAll)) add(f.sev, f.id, f.msg, p.url)
+    for (const n of phones(view.links, ldAll)) sitePhones.set(n, [...(sitePhones.get(n) || []), p.url])
 
     // social cards: raw HTML only, since link-preview scrapers never run JavaScript
     const soc = parseSocial(cache.get(p.url)?.body || '', p.finalUrl)
@@ -649,6 +654,7 @@ async function main() {
       }
     }
   }
+  if (sitePhones.size > 1) add('P3', 'local.phone-mismatch', `${sitePhones.size} different phone numbers across the site (${[...sitePhones].slice(0, 4).map(([n, us]) => `${n} on ${us.length} page(s)`).join(', ')}). Fine for separate departments or locations; otherwise use one number everywhere, the same as the Google Business Profile.`, [...sitePhones.values()][0][0])
   for (const [t, us] of titles) if (us.length > 1) add('P2', 'title.duplicate', `${us.length} pages share the title "${t}": ${us.slice(0, 4).join(', ')}${us.length > 4 ? ' …' : ''}.`, us[0])
   for (const [t, us] of descs) if (us.length > 1) add('P2', 'description.duplicate', `${us.length} pages share one meta description: ${us.slice(0, 4).join(', ')}${us.length > 4 ? ' …' : ''}.`, us[0])
 

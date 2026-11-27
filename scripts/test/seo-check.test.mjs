@@ -287,3 +287,33 @@ test('gsc.mjs finds striking distance, low CTR, cannibalisation, drops and pages
   assert.deepEqual(u.striking.map((x) => x.query), ['svg converter'])
   assert.ok(u.skipped.some((s) => s.startsWith('cannibalisation')))
 })
+
+test('shops and local businesses: Product offers, LocalBusiness fields, one phone number', async () => {
+  const ld = (o) => `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...o })}</script>`
+  const shell = (path, head, body = '') => `<!doctype html><html lang="en"><head><title>Shop fixture page ${path}</title><link rel="canonical" href="PATH">${head}</head><body><h1>${path}</h1>${body}<a href="/">Home</a><a href="/good">Good</a><a href="/partial">Partial</a><a href="/bare">Bare</a><a href="/visit">Visit</a></body></html>`
+  const pages = {
+    '/': shell('/', ld({ '@type': 'Bakery', name: 'Fixture Bakery', address: { '@type': 'PostalAddress', streetAddress: '1 Main St' }, telephone: '+1 (555) 010-0000' }), '<a href="tel:+15550100000">Call</a>'),
+    '/good': shell('/good', ld({ '@type': 'Product', name: 'Loaf', offers: { '@type': 'Offer', price: '6.00', priceCurrency: 'USD', availability: 'https://schema.org/InStock' } })),
+    '/partial': shell('/partial', ld({ '@graph': [{ '@type': 'Product', name: 'Bun', offers: { '@type': 'Offer', price: '2.00' } }] })),
+    '/bare': shell('/bare', ld({ '@type': 'Product', name: 'Cake' })),
+    '/visit': shell('/visit', ld({ '@type': 'Restaurant', name: 'Fixture Cafe' }), '<a href="tel:555-010-9999">Call the cafe</a>'),
+  }
+  const server = createServer((req, res) => {
+    const path = new URL(req.url, 'http://x').pathname
+    if (!pages[path]) return res.writeHead(404).end()
+    res.writeHead(200, { 'content-type': 'text/html' }).end(pages[path].replace('PATH', `http://localhost:${server.address().port}${path}`))
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const out = join(mkdtempSync(join(tmpdir(), 'seo-shop-')), 'r.json')
+  await new Promise((resolve) => execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max', '5', '--max-links', '0', '--json', out], () => resolve()))
+  server.close()
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  const got = r.findings.filter((f) => /^(schema\.(product|local)|local\.)/.test(f.id)).map((f) => `${new URL(f.url).pathname} ${f.id}`).sort()
+  assert.deepEqual(got, [
+    '/ local.phone-mismatch', '/ schema.local-recommended', '/bare schema.product-incomplete',
+    '/partial schema.product-availability', '/partial schema.product-offer', '/visit schema.local-incomplete',
+  ])
+  assert.match(r.findings.find((f) => f.id === 'schema.product-offer').msg, /missing priceCurrency/)
+  assert.match(r.findings.find((f) => f.id === 'local.phone-mismatch').msg, /^2 different phone numbers/, '+1 (555) 010-0000 and tel:+15550100000 are the same number')
+})
