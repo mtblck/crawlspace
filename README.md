@@ -104,6 +104,7 @@ It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-market
 | `/crawlspace:schema [url \| route] [type]` | Find, validate and write schema.org JSON-LD the way the stack does head content. |
 | `/crawlspace:social [url ...]` | Social cards and link previews: OG and Twitter tags on every page, the share image fetched and measured, and a picture of how the link unfurls on Slack, Facebook, X, LinkedIn and iMessage. |
 | `/crawlspace:keywords [url \| topic] [competitors]` | Keyword research without paid tools: queries from the site, search results, People Also Ask, forums and Search Console data, one primary query per page, cannibalisation and gaps, `keywords.md` and a CSV. |
+| `/crawlspace:search-console [exports]` | Google's own numbers, from a Search Console export or MCP server: striking-distance queries, low CTR for the position, real cannibalisation, why clicks dropped (ranking, demand or CTR), indexing states, and checker findings on pages that already get impressions. |
 | `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, each call labelled documented or judgement. |
 
 Claude also picks them up from their descriptions: "why isn't this page indexed?", "check how this
@@ -156,6 +157,14 @@ only, the way the scrapers see it. The layouts are close approximations, not pix
 <p align="center">
   <img src=".github/readme/previews.webp" alt="Link previews for Harbor's blog post on Slack, Facebook, X, LinkedIn and iMessage, each with its title, description and the Harbor share image" width="560" />
 </p>
+
+### Search Console rows
+
+`scripts/gsc.mjs --rows now.csv [--previous before.csv] [--checker seo.json]` reads Search Console
+performance rows (the UI export's `Queries.csv` and `Pages.csv`, or query + page rows from the API, an
+MCP server, Sheets or BigQuery) and lists striking-distance queries, low CTR judged against the site's own
+CTR at that position, cannibalisation, lost clicks with the number that moved, and checker findings on pages
+that get impressions. It reads files only and calls no API.
 
 ### Launch checklist
 

@@ -43,9 +43,10 @@ each topic it writes about), collect queries from:
   queries: read their key pages (titles, H1s, headings, page types) to see which
   queries they target that this site doesn't. Never claim to know their rankings
   or traffic.
-- **Search Console export**, if given: queries with impressions but few clicks
-  (a title or intent problem), queries ranking 8–20 (closest wins), and queries
-  where two of the site's pages both get impressions (cannibalisation).
+- **Search Console export**, if given: run the `search-console` skill's
+  `scripts/gsc.mjs` on it for queries with low CTR for their position (a title
+  or intent problem), queries ranking 8–20 (closest wins), and queries where two
+  of the site's pages both take real impressions (cannibalisation).
 
 Keep the queries real: each one traces to a source in the list above.
 
