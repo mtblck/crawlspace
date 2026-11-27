@@ -115,8 +115,8 @@ Judgement, so say it's judgement and give the reason.
 ## 6. Performance and mobile
 
 Core Web Vitals at the 75th percentile: **LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1**.
-Use field data (CrUX via PageSpeed Insights, Search Console) when the site has
-enough traffic; otherwise Lighthouse lab numbers, labelled as lab. Hand causes to
+Use field data (`scripts/field-cwv.mjs`: CrUX via PageSpeed Insights, or
+Search Console's Core Web Vitals report) when the site has enough traffic; otherwise Lighthouse lab numbers, labelled as lab. Hand causes to
 the `pr-review:performance` skill. Mobile: responsive layout, readable text without
 zoom, tap targets big enough to hit (Lighthouse flags under 48×48 CSS px;
 WCAG 2.2's minimum is 24×24), no horizontal scroll, same content

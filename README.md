@@ -159,6 +159,13 @@ only, the way the scrapers see it. The layouts are close approximations, not pix
   <img src=".github/readme/previews.webp" alt="Link previews for Harbor's blog post on Slack, Facebook, X, LinkedIn and iMessage, each with its title, description and the Harbor share image" width="560" />
 </p>
 
+### Field Core Web Vitals
+
+`scripts/field-cwv.mjs --url <page> [--url ...]` gets real-user LCP, INP and CLS (Chrome UX Report,
+75th percentile) for each page and its whole origin from Google's PageSpeed Insights API, and says
+which pass. It contacts Google, not your site. It works without a key at a small shared quota; set
+`PAGESPEED_API_KEY` for more.
+
 ### Search Console rows
 
 `scripts/gsc.mjs --rows now.csv [--previous before.csv] [--checker seo.json]` reads Search Console
