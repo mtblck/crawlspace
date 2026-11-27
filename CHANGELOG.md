@@ -16,7 +16,7 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   CTR against the site's own CTR at that position, real cannibalisation (one query, several pages), and lost
   clicks with whether position, impressions or CTR moved, and puts checker findings on pages that already get
   impressions first. The skill also sorts URL Inspection and Page indexing results into what each needs.
-  `audit` and `keywords` hand off to it. (#PR)
+  `audit` and `keywords` hand off to it. (#15)
 
 ## [2.0.0] - 2026-11-25
 
