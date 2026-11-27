@@ -100,13 +100,13 @@ It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-market
 | Skill | Use it for |
 | --- | --- |
 | `/crawlspace:audit [url \| route \| fix]` | Full audit: crawl and index controls, metadata and canonicals, sitemaps, raw vs rendered HTML, links, structured data, Core Web Vitals, content and E-E-A-T, AI search. Verified findings graded P1/P2/P3, a technical score, `SEO-AUDIT.md`, and an interactive launch checklist to tick off. With `fix`, fixes shared code first and re-measures. |
-| `/crawlspace:page <url \| route> [query]` | One page against the query it should win and the pages that rank for it: intent, title and description options, content gaps, internal links. |
+| `/crawlspace:page <url \| route> [query]` | One page against the query it should win and the pages that rank for it: intent, title and description options, content gaps, internal links. `brief <query>` plans a new page; `refresh` lists the pages most in need of an update. |
 | `/crawlspace:schema [url \| route] [type]` | Find, validate and write schema.org JSON-LD the way the stack does head content. |
 | `/crawlspace:social [url ...]` | Social cards and link previews: OG and Twitter tags on every page, the share image fetched and measured, and a picture of how the link unfurls on Slack, Facebook, X, LinkedIn and iMessage. |
 | `/crawlspace:keywords [url \| topic] [competitors]` | Keyword research without paid tools: queries from the site, search results, People Also Ask, forums and Search Console data, one primary query per page, cannibalisation and gaps, `keywords.md` and a CSV. |
 | `/crawlspace:search-console [exports]` | Google's own numbers, from a Search Console export or MCP server: striking-distance queries, low CTR for the position, real cannibalisation, why clicks dropped (ranking, demand or CTR), indexing states, and checker findings on pages that already get impressions. |
 | `/crawlspace:links [url]` | Internal linking plan from the real link graph: orphans, buried pages, pages with one link or none, vague anchors, missing hubs, and specific links to add (source, anchor, target), using the keyword map when there is one. |
-| `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, each call labelled documented or judgement. |
+| `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, and agent readiness (Content-Signal, Markdown for agents, firewalls blocking AI fetchers), each call labelled documented or judgement. |
 
 Claude also picks them up from their descriptions: "why isn't this page indexed?", "check how this
 link looks on Slack".
@@ -115,7 +115,8 @@ link looks on Slack".
 
 `scripts/seo-check.mjs` is the evidence collector the skills share. It needs Node 18 or newer and
 nothing else, and renders pages with Playwright when Playwright is already installed. It only sends
-GET requests to the site it's pointed at, plus any old URLs you list with `--redirects`.
+GET requests to the site it's pointed at, plus any old URLs you list with `--redirects`. Four of
+them fetch the home page with AI fetchers' user agents, to see whether bot protection blocks them.
 
 ```
 node scripts/seo-check.mjs --url https://example.com --max 30 --md seo.md --json seo.json
@@ -130,7 +131,8 @@ AI search fetchers, training crawlers and control tokens), the sitemap or sitema
 index, and an even sample of sitemap URLs (or a crawl from the home page), then
 checks status codes, redirects, noindex in sitemaps, titles and descriptions
 (missing, length, duplicates), canonicals and their targets, `lang`, viewport,
-headings, images, JSON-LD parsing (with Product offer and LocalBusiness checks for shops and local
+headings, images (alt text, size attributes, and for same-site images their weight, format, `srcset` and a
+lazy-loaded first image), JSON-LD parsing (with Product offer and LocalBusiness checks for shops and local
 businesses, and one phone number across the site), Open Graph and Twitter card tags (fetching each share
 image to check its status, type, file size, pixel size and ratio), mixed content, hreflang
 codes and return links, internal link status, favicons, apple-touch-icon, manifest and
@@ -159,6 +161,13 @@ only, the way the scrapers see it. The layouts are close approximations, not pix
 <p align="center">
   <img src=".github/readme/previews.webp" alt="Link previews for Harbor's blog post on Slack, Facebook, X, LinkedIn and iMessage, each with its title, description and the Harbor share image" width="560" />
 </p>
+
+### Field Core Web Vitals
+
+`scripts/field-cwv.mjs --url <page> [--url ...]` gets real-user LCP, INP and CLS (Chrome UX Report,
+75th percentile) for each page and its whole origin from Google's PageSpeed Insights API, and says
+which pass. It contacts Google, not your site. It works without a key at a small shared quota; set
+`PAGESPEED_API_KEY` for more.
 
 ### Search Console rows
 

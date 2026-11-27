@@ -11,6 +11,23 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
 
 ### Added
 
+- Agent readiness in `/crawlspace:ai-search` and the checker: Content-Signal lines in robots.txt, whether the
+  site serves or links a Markdown version for agents, and whether the server blocks or challenges AI fetchers
+  (OAI-SearchBot, ChatGPT-User, Claude-User, PerplexityBot) that robots.txt allows (`agents.blocked`, P3). (#17)
+- The checker measures the site's own images: `img.heavy` (over 200 KB, P2 over 1 MB), `img.format` (JPEG, PNG
+  or GIF over 100 KB where WebP or AVIF would do), `img.srcset` (1000 px or wider with no `srcset` or
+  `<picture>`) and `img.lcp-lazy` (the first image on the page is `loading="lazy"`, P2). Up to 150 same-site
+  images are downloaded (`--max-images`); images on other hosts aren't fetched. (#18)
+- `scripts/field-cwv.mjs` gets real-user Core Web Vitals (LCP, INP and CLS at the 75th percentile, plus FCP and
+  TTFB) for each page and the whole origin from the PageSpeed Insights API, rated against Google's thresholds.
+  The audit uses field data first and labels Lighthouse numbers as lab. It works without a key; set
+  `PAGESPEED_API_KEY` for more quota. (#19)
+- `/crawlspace:page brief <query>` writes a content brief for a page that doesn't exist yet (intent and format
+  from what ranks, title, description, slug, an outline with the questions to answer and what only this site
+  can say, evidence to gather, internal links and schema), after checking no existing page already targets
+  the query. `/crawlspace:page refresh` builds a queue of pages to update, from lost Search Console clicks,
+  out-of-date content, real last-edit dates and striking-distance queries. The checker's JSON now includes
+  each page's sitemap `lastmod`. (#20)
 - Checks for shops and local businesses. Product markup without a name, without offers, reviews or ratings
   (`schema.product-incomplete`), with an offer missing its price or currency (`schema.product-offer`) or its
   availability (`schema.product-availability`); LocalBusiness markup (and subtypes such as Bakery or Dentist)

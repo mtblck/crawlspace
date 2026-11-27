@@ -1,6 +1,6 @@
 ---
 name: ai-search
-description: AI search readiness (GEO/AEO) - which search and AI crawlers robots.txt lets in and whether that's on purpose, whether pages work without JavaScript (AI crawlers don't render it), whether content is easy to quote and attribute, entity clarity (who you are, sameAs, consistent names) and llms.txt - with a clear line between what's documented and what's speculation. Use when asked about AI search, ChatGPT, Claude, Perplexity or Google AI Overviews visibility, GEO, AEO, LLM optimisation, AI crawlers, GPTBot or llms.txt.
+description: AI search readiness (GEO/AEO) - which search and AI crawlers robots.txt lets in and whether that's on purpose, whether pages work without JavaScript (AI crawlers don't render it), whether content is easy to quote and attribute, entity clarity (who you are, sameAs, consistent names), llms.txt and agent readiness (Content-Signal, Markdown for agents, firewalls blocking AI fetchers) - with a clear line between what's documented and what's speculation. Use when asked about AI search, ChatGPT, Claude, Perplexity or Google AI Overviews visibility, GEO, AEO, LLM optimisation, AI crawlers, GPTBot, llms.txt, Content-Signal, Markdown for agents, or whether AI agents can read the site.
 argument-hint: "[url]"
 ---
 
@@ -75,9 +75,38 @@ Report it as present or absent, never as a problem. If asked to add one, generat
 it from the sitemap and real page summaries, and keep it in the build so it doesn't
 go stale.
 
-## 6. Report
+## 6. Agents
+
+AI assistants and agents increasingly fetch pages for a user, not just to
+index them. The checker's "Agents" line and `agents` JSON report:
+
+- **Content-Signal** lines in robots.txt (`search=yes, ai-input=yes,
+  ai-train=no`): Cloudflare's [Content Signals Policy](https://blog.cloudflare.com/content-signals-policy/)
+  for stating how content may be used. **Documented** by Cloudflare as a
+  statement of preference, not a technical block; whether a given AI operator
+  honours it is up to that operator, so say so. If the owner wants one, it goes
+  in robots.txt beside the rules it qualifies.
+- **A Markdown version for agents**: whether the home page answers
+  `Accept: text/markdown` with Markdown (Cloudflare's
+  [Markdown for Agents](https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/)
+  does this at the edge) or links one with `<link rel="alternate"
+  type="text/markdown">`. Helpful for docs and developer tools, optional
+  elsewhere (**judgement**); never a ranking factor.
+- **Firewall treatment of AI fetchers**: the home page is requested with
+  OAI-SearchBot, ChatGPT-User, Claude-User and PerplexityBot user agents. A 403
+  or a bot challenge for an agent that robots.txt allows is an `agents.blocked`
+  finding. The real crawlers come from published IP ranges, and bot protection
+  may treat a spoofed request differently from a verified one, so treat it as a
+  lead: check the host's bot settings (Cloudflare AI bot blocking, Vercel bot
+  protection or firewall rules) before calling it a block.
+
+Other discovery files (`/.well-known/…`, agent catalogues, WebMCP tools) are
+emerging and differ by vendor. Report what's there if the user asks; don't grade
+their absence.
+
+## 7. Report
 
 Crawler table with the intended/unintended call for each block, the rendering
-verdict, the top changes for the pages that should be cited, each labelled
-documented or judgement, and anything that needs the owner's decision (training
-opt-outs, bot protection settings).
+verdict, the agent findings, the top changes for the pages that should be cited,
+each labelled documented or judgement, and anything that needs the owner's
+decision (training opt-outs, Content-Signal, bot protection settings).
