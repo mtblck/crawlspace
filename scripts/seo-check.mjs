@@ -27,7 +27,7 @@ import { parseRedirectList, gradeRedirect } from './lib/redirects.mjs'
 import { baselinePaths, compareRuns, validBaseline } from './lib/drift.mjs'
 import { templateGroups, spread, chrome, measureGroup, templateFindings } from './lib/templates.mjs'
 
-const VERSION = '2.0.0'
+const VERSION = '2.1.0'
 
 // ---------------------------------------------------------------- arguments
 
