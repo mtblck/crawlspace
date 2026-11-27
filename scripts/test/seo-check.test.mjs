@@ -34,7 +34,7 @@ const png = (w, h) => {
   return b
 }
 
-function site(port) {
+function site(port, tweak) {
   const o = `http://localhost:${port}`
   const images = { '/icon.png': png(32, 32), '/og.png': png(1200, 630), '/small.png': png(100, 100), '/card.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>' }
   const routes = {
@@ -53,6 +53,7 @@ ${['/', '/about', '/dup-a', '/dup-b', '/secret', '/old', '/fr', '/en'].map((p) =
     '/en': [200, 'text/html', page({ title: 'English page', desc: 'An English test page that forgets to link back to the French one.', canonical: `${o}/en`, extraHead: `<link rel="alternate" hreflang="en" href="${o}/en">` })],
   }
   for (const r of Object.values(routes)) if (typeof r[2] === 'string') r[2] = r[2].replace('OGIMG', `${o}/og.png`)
+  tweak?.(routes, o)
   return createServer((req, res) => {
     const path = new URL(req.url, o).pathname
     if (images[path]) {
@@ -105,6 +106,50 @@ test('reports the planted problems', async () => {
   assert.equal(gpt.allowed, false)
   assert.equal(google.allowed, true)
   assert.deepEqual(r.pages.find((p) => p.url.endsWith(`${port}/`)).schemaTypes, ['Organization'])
+})
+
+async function run(tweak, args) {
+  const server = site(0)
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  server.close()
+  const real = site(port, tweak)
+  await new Promise((r) => real.listen(port, '127.0.0.1', r))
+  const out = join(mkdtempSync(join(tmpdir(), 'seo-check-')), 'r.json')
+  const md = out.replace(/json$/, 'md')
+  const code = await new Promise((resolve) =>
+    execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max-links', '0', '--json', out, '--md', md, ...args], (err) => resolve(err ? err.code : 0)),
+  )
+  real.close()
+  return { code, r: JSON.parse(readFileSync(out, 'utf8')), md: readFileSync(md, 'utf8'), out }
+}
+
+test('--baseline grades regressions and lists changes', async () => {
+  const before = await run(null, ['--max', '4', '--pages', '/about,/dup-a'])
+  assert.equal(before.r.drift, null)
+  const after = await run((routes, o) => {
+    routes['/robots.txt'][2] = routes['/robots.txt'][2].replace('User-agent: *\nAllow: /', 'User-agent: *\nAllow: /\n\nUser-agent: Googlebot\nDisallow: /')
+    routes['/'][2] = routes['/'][2]
+      .replace('<title>Home of the fixture site</title>', '<title>A new home title</title>')
+      .replace(/<script type="application\/ld\+json">[^<]*<\/script>/, '')
+      .replace(`<link rel="canonical" href="${o}/">`, `<link rel="canonical" href="${o}/about">`)
+    routes['/about'][2] = routes['/about'][2].replace('<head>', '<head><meta name="robots" content="noindex">')
+    routes['/dup-a'] = [500, 'text/html', 'down']
+  }, ['--max', '1', '--baseline', before.out])
+  const ids = after.r.findings.filter((f) => f.id.startsWith('drift.')).map((f) => `${f.id} ${new URL(f.url || 'http://x/robots.txt').pathname}`)
+  assert.equal(after.code, 1)
+  for (const want of ['drift.canonical /', 'drift.schema-lost /', 'drift.noindex /about', 'drift.status /dup-a', 'drift.robots-search /robots.txt'])
+    assert.ok(ids.includes(want), `expected ${want}; got ${ids.join(', ')}`)
+  assert.ok(!ids.some((i) => i.startsWith('drift.schema-lost /about')), 'a page that became noindex is not compared further')
+  assert.equal(after.r.drift.pages.compared, before.r.pages.length, 'every baseline page is fetched again despite --max 1')
+  assert.ok(after.r.drift.changes.some((c) => c.field === 'title' && c.to === 'A new home title'))
+  assert.equal(after.r.drift.score.before, before.r.score)
+  assert.ok(after.r.drift.kinds.new.includes('robots.blocks-search'))
+  assert.match(after.md, /## Drift since the baseline/)
+
+  const same = await run(null, ['--max', '1', '--baseline', before.out])
+  assert.deepEqual(same.r.drift.findings, [], 'an unchanged site has no drift')
+  assert.deepEqual(same.r.drift.changes, [])
 })
 
 test('checklist.mjs builds the checklist and carries ticks over', async () => {
