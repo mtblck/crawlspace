@@ -15,7 +15,7 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   `old,new` CSV or the old sitemap) and it flags each that doesn't 301/308 in one hop to a live, indexable page
   that is its own canonical (missing, temporary, chained or looping redirects, redirects to the home page or to
   the wrong page, and targets that are broken, noindex or canonicalised elsewhere). The audit skill says where
-  to find the old URLs. (#PR)
+  to find the old URLs. (#14)
 
 ## [2.0.0] - 2026-11-25
 
