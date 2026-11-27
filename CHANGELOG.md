@@ -11,6 +11,9 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
 
 ### Added
 
+- Agent readiness in `/crawlspace:ai-search` and the checker: Content-Signal lines in robots.txt, whether the
+  site serves or links a Markdown version for agents, and whether the server blocks or challenges AI fetchers
+  (OAI-SearchBot, ChatGPT-User, Claude-User, PerplexityBot) that robots.txt allows (`agents.blocked`, P3). (#PR)
 - `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
   and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
   canonical away, or lost its share image, structured data or most of its words; a search crawler newly
