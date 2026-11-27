@@ -99,6 +99,7 @@ test('reports the planted problems', async () => {
   assert.equal(r.crawl.capped, false)
   const home = r.pages.find((p) => p.url.endsWith(`${port}/`))
   assert.equal(home.social.imageSize, '1200×630')
+  assert.equal(home.lastmod, '2026-01-01', 'sitemap lastmod is carried into the page record')
   assert.ok(!r.findings.some((f) => f.url === home.url && /^social\.image-(broken|small|svg|relative|type|heavy|ratio)/.test(f.id)), 'home og:image is fine')
   for (const id of ['icons.favicon-missing', 'icons.manifest-broken', 'robots.blocks-search', 'title.missing', 'html.viewport', 'canonical.conflict']) assert.ok(!ids.has(id), `did not expect ${id}`)
   const gpt = r.crawlers.find((c) => c.agent === 'GPTBot')

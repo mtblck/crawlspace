@@ -451,6 +451,7 @@ async function main() {
   for (const p of BASE_PATHS) pages.add(norm(new URL(p, origin).href))
   const smLocs = [...new Set(sm.urls.map((u) => toLocal(u.loc)))]
   const inSitemap = new Set(smLocs)
+  const lastmods = new Map(sm.urls.filter((u) => u.lastmod).map((u) => [toLocal(u.loc), u.lastmod]))
   if (smLocs.length) {
     const step = Math.max(1, smLocs.length / Math.max(1, MAX - pages.size))
     for (let i = 0; i < smLocs.length && pages.size < MAX; i += step) pages.add(smLocs[Math.floor(i)])
@@ -749,6 +750,7 @@ async function main() {
     status: p.status,
     redirects: p.chain.length,
     inSitemap: inSitemap.has(p.url),
+    lastmod: lastmods.get(p.url) || null,
     title: p.raw?.title ?? null,
     renderedTitle: p.rendered?.title ?? null,
     description: p.raw?.description ?? null,

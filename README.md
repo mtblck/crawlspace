@@ -100,7 +100,7 @@ It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-market
 | Skill | Use it for |
 | --- | --- |
 | `/crawlspace:audit [url \| route \| fix]` | Full audit: crawl and index controls, metadata and canonicals, sitemaps, raw vs rendered HTML, links, structured data, Core Web Vitals, content and E-E-A-T, AI search. Verified findings graded P1/P2/P3, a technical score, `SEO-AUDIT.md`, and an interactive launch checklist to tick off. With `fix`, fixes shared code first and re-measures. |
-| `/crawlspace:page <url \| route> [query]` | One page against the query it should win and the pages that rank for it: intent, title and description options, content gaps, internal links. |
+| `/crawlspace:page <url \| route> [query]` | One page against the query it should win and the pages that rank for it: intent, title and description options, content gaps, internal links. `brief <query>` plans a new page; `refresh` lists the pages most in need of an update. |
 | `/crawlspace:schema [url \| route] [type]` | Find, validate and write schema.org JSON-LD the way the stack does head content. |
 | `/crawlspace:social [url ...]` | Social cards and link previews: OG and Twitter tags on every page, the share image fetched and measured, and a picture of how the link unfurls on Slack, Facebook, X, LinkedIn and iMessage. |
 | `/crawlspace:keywords [url \| topic] [competitors]` | Keyword research without paid tools: queries from the site, search results, People Also Ask, forums and Search Console data, one primary query per page, cannibalisation and gaps, `keywords.md` and a CSV. |
