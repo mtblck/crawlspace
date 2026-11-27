@@ -25,7 +25,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-1F1A14" /></a>
-  <a href="CHANGELOG.md"><img alt="Version 2.0.0" src="https://img.shields.io/badge/version-2.0.0-1F1A14" /></a>
+  <a href="CHANGELOG.md"><img alt="Version 2.1.0" src="https://img.shields.io/badge/version-2.1.0-1F1A14" /></a>
   <a href="https://github.com/mtblck/claude-marketplace"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude_Code-plugin-1F1A14" /></a>
   <a href="#the-checker"><img alt="Checker: Node 18+, zero dependencies" src="https://img.shields.io/badge/checker-zero_dependencies-1F1A14" /></a>
   <a href="https://mattblack.space/skills/crawlspace/"><img alt="Live at mattblack.space" src="https://img.shields.io/badge/live-mattblack.space-9C4A0C" /></a>

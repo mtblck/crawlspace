@@ -9,38 +9,10 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-27
+
 ### Added
 
-- Agent readiness in `/crawlspace:ai-search` and the checker: Content-Signal lines in robots.txt, whether the
-  site serves or links a Markdown version for agents, and whether the server blocks or challenges AI fetchers
-  (OAI-SearchBot, ChatGPT-User, Claude-User, PerplexityBot) that robots.txt allows (`agents.blocked`, P3). (#17)
-- The checker measures the site's own images: `img.heavy` (over 200 KB, P2 over 1 MB), `img.format` (JPEG, PNG
-  or GIF over 100 KB where WebP or AVIF would do), `img.srcset` (1000 px or wider with no `srcset` or
-  `<picture>`) and `img.lcp-lazy` (the first image on the page is `loading="lazy"`, P2). Up to 150 same-site
-  images are downloaded (`--max-images`); images on other hosts aren't fetched. (#18)
-- `scripts/field-cwv.mjs` gets real-user Core Web Vitals (LCP, INP and CLS at the 75th percentile, plus FCP and
-  TTFB) for each page and the whole origin from the PageSpeed Insights API, rated against Google's thresholds.
-  The audit uses field data first and labels Lighthouse numbers as lab. It works without a key; set
-  `PAGESPEED_API_KEY` for more quota. (#19)
-- Programmatic and comparison pages: the checker groups sitemap URLs by pattern (`/tools/*`, `/integrations/*`,
-  `x-vs-y`), samples three pages of each large group and compares their text with the site's header and footer
-  set aside. `programmatic.near-duplicate` (60% or more alike), `programmatic.thin` (about 200 words of their own
-  or fewer) and `programmatic.bloat` (weak template pages are half the sitemap or more), with a "Template page
-  groups" line in the report and `templates` in the JSON. The audit checklist adds guidance for programmatic
-  and comparison (vs and alternatives) pages. (#22)
-- `/crawlspace:page brief <query>` writes a content brief for a page that doesn't exist yet (intent and format
-  from what ranks, title, description, slug, an outline with the questions to answer and what only this site
-  can say, evidence to gather, internal links and schema), after checking no existing page already targets
-  the query. `/crawlspace:page refresh` builds a queue of pages to update, from lost Search Console clicks,
-  out-of-date content, real last-edit dates and striking-distance queries. The checker's JSON now includes
-  each page's sitemap `lastmod`. (#20)
-- Checks for shops and local businesses. Product markup without a name, without offers, reviews or ratings
-  (`schema.product-incomplete`), with an offer missing its price or currency (`schema.product-offer`) or its
-  availability (`schema.product-availability`); LocalBusiness markup (and subtypes such as Bakery or Dentist)
-  missing its name or address (`schema.local-incomplete`) or telephone, url and opening hours
-  (`schema.local-recommended`); and several different phone numbers across the site (`local.phone-mismatch`).
-  The audit checklist has full shop and local sections: variants, faceted URLs, out-of-stock and discontinued
-  products, NAP consistency, location pages and Google Business Profile. (#21)
 - `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
   and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
   canonical away, or lost its share image, structured data or most of its words; a search crawler newly
@@ -60,11 +32,41 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   `audit` and `keywords` hand off to it. (#15)
 - `/crawlspace:links` writes an internal linking plan: specific links to add (source page, anchor text,
   target), hub pages for topics that lack one, and anchors to rewrite, based on the site's real link graph and
-  the keyword map.
+  the keyword map. (#16)
 - The checker's `--crawl` now records, per page, how many pages link to it, which ones, and the anchor texts
   used, telling navigation links (on 80%+ of pages) from links in the content (`crawl.nodes` in the JSON). New
   P3 findings: `links.few-inbound` (non-navigation pages with one internal link or none) and
   `links.generic-anchor` ("read more", "click here"). (#16)
+- Agent readiness in `/crawlspace:ai-search` and the checker: Content-Signal lines in robots.txt, whether the
+  site serves or links a Markdown version for agents, and whether the server blocks or challenges AI fetchers
+  (OAI-SearchBot, ChatGPT-User, Claude-User, PerplexityBot) that robots.txt allows (`agents.blocked`, P3). (#17)
+- The checker measures the site's own images: `img.heavy` (over 200 KB, P2 over 1 MB), `img.format` (JPEG, PNG
+  or GIF over 100 KB where WebP or AVIF would do), `img.srcset` (1000 px or wider with no `srcset` or
+  `<picture>`) and `img.lcp-lazy` (the first image on the page is `loading="lazy"`, P2). Up to 150 same-site
+  images are downloaded (`--max-images`); images on other hosts aren't fetched. (#18)
+- `scripts/field-cwv.mjs` gets real-user Core Web Vitals (LCP, INP and CLS at the 75th percentile, plus FCP and
+  TTFB) for each page and the whole origin from the PageSpeed Insights API, rated against Google's thresholds.
+  The audit uses field data first and labels Lighthouse numbers as lab. It works without a key; set
+  `PAGESPEED_API_KEY` for more quota. (#19)
+- `/crawlspace:page brief <query>` writes a content brief for a page that doesn't exist yet (intent and format
+  from what ranks, title, description, slug, an outline with the questions to answer and what only this site
+  can say, evidence to gather, internal links and schema), after checking no existing page already targets
+  the query. `/crawlspace:page refresh` builds a queue of pages to update, from lost Search Console clicks,
+  out-of-date content, real last-edit dates and striking-distance queries. The checker's JSON now includes
+  each page's sitemap `lastmod`. (#20)
+- Checks for shops and local businesses. Product markup without a name, without offers, reviews or ratings
+  (`schema.product-incomplete`), with an offer missing its price or currency (`schema.product-offer`) or its
+  availability (`schema.product-availability`); LocalBusiness markup (and subtypes such as Bakery or Dentist)
+  missing its name or address (`schema.local-incomplete`) or telephone, url and opening hours
+  (`schema.local-recommended`); and several different phone numbers across the site (`local.phone-mismatch`).
+  The audit checklist has full shop and local sections: variants, faceted URLs, out-of-stock and discontinued
+  products, NAP consistency, location pages and Google Business Profile. (#21)
+- Programmatic and comparison pages: the checker groups sitemap URLs by pattern (`/tools/*`, `/integrations/*`,
+  `x-vs-y`), samples three pages of each large group and compares their text with the site's header and footer
+  set aside. `programmatic.near-duplicate` (60% or more alike), `programmatic.thin` (about 200 words of their own
+  or fewer) and `programmatic.bloat` (weak template pages are half the sitemap or more), with a "Template page
+  groups" line in the report and `templates` in the JSON. The audit checklist adds guidance for programmatic
+  and comparison (vs and alternatives) pages. (#22)
 
 ## [2.0.0] - 2026-11-25
 
@@ -83,5 +85,6 @@ Released as the `seo` plugin in [mtblck/claude-marketplace](https://github.com/m
 (full site audit, page, schema, social with link previews, AI search, keywords, the link-graph crawl and the
 launch checklist). See that repo's history for details.
 
-[Unreleased]: https://github.com/mtblck/crawlspace/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/mtblck/crawlspace/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/mtblck/crawlspace/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/mtblck/crawlspace/releases/tag/v2.0.0
