@@ -14,7 +14,7 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
 - The checker measures the site's own images: `img.heavy` (over 200 KB, P2 over 1 MB), `img.format` (JPEG, PNG
   or GIF over 100 KB where WebP or AVIF would do), `img.srcset` (1000 px or wider with no `srcset` or
   `<picture>`) and `img.lcp-lazy` (the first image on the page is `loading="lazy"`, P2). Up to 150 same-site
-  images are downloaded (`--max-images`); images on other hosts aren't fetched. (#PR)
+  images are downloaded (`--max-images`); images on other hosts aren't fetched. (#18)
 - `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
   and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
   canonical away, or lost its share image, structured data or most of its words; a search crawler newly
