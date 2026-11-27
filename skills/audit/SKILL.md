@@ -98,9 +98,17 @@ it renders pages with Playwright when Playwright is installed (it is in Claude's
 cloud sandbox) to compare raw and rendered HTML. Exit 1 means at least one P1.
 
 Also, when you can:
-- **Core Web Vitals:** run the `pr-review:performance` skill's Lighthouse step or
-  `npx @lhci/cli@0.15.1 collect` on the key templates. Field data (CrUX, Search
-  Console) beats lab data; say which you have.
+- **Core Web Vitals, field data first:** for a live public site, run
+  `node "${CLAUDE_PLUGIN_ROOT}/scripts/field-cwv.mjs" --url <home> --url <key template> … --md cwv.md`
+  (up to 10 URLs, `--strategy desktop` for desktop). It asks Google's PageSpeed
+  Insights API for real-user Chrome UX Report data at the 75th percentile, for
+  each page and for the whole origin. It sends the URLs to Google, not the site,
+  so skip it for private or unreleased URLs. Without a key it shares a small
+  quota; on a 429, say so and suggest a free `PAGESPEED_API_KEY`. Never ask for
+  the key in chat or write it to a file. Pages with too little traffic have no
+  field data; say so rather than filling the gap. Then use lab data to find
+  causes: the `pr-review:performance` skill's Lighthouse step or
+  `npx @lhci/cli@0.15.1 collect` on the key templates, labelled as lab.
 - **Search Console / analytics:** only if the user provides exports or a Search
   Console MCP server is connected; then run the `search-console` skill's analysis
   with `--checker` pointing at this run, so P1/P2 findings on pages that already

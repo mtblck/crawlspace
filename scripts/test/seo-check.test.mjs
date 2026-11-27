@@ -354,3 +354,35 @@ test('images: weight, format, srcset and a lazy-loaded first image', async () =>
   assert.match(f['img.srcset'].msg, /^2 image\(s\)/, 'big.png and wide.png; srcset and <picture> are fine')
   assert.deepEqual(r.images, { measured: 5, otherHost: 1, skipped: 0 }, 'five same-site <img> elements, one on a CDN')
 })
+
+test('field-cwv.mjs reads CrUX p75 from PageSpeed Insights, page and origin', async () => {
+  const exp = (lcp, inp, cls) => ({ metrics: { LARGEST_CONTENTFUL_PAINT_MS: { percentile: lcp }, INTERACTION_TO_NEXT_PAINT: { percentile: inp }, CUMULATIVE_LAYOUT_SHIFT_SCORE: { percentile: cls }, FIRST_CONTENTFUL_PAINT_MS: { percentile: 1200 } } })
+  const seen = []
+  const server = createServer((req, res) => {
+    const q = new URL(req.url, 'http://x').searchParams
+    seen.push([q.get('url'), q.get('strategy'), q.get('key')])
+    if (q.get('url').endsWith('/limited')) return res.writeHead(429).end('{}')
+    res.writeHead(200, { 'content-type': 'application/json' })
+    if (q.get('url').endsWith('/slow')) return res.end(JSON.stringify({ loadingExperience: { ...exp(4100, 180, 5), origin_fallback: false }, originLoadingExperience: exp(2000, 150, 3) }))
+    if (q.get('url').endsWith('/quiet')) return res.end(JSON.stringify({ loadingExperience: { ...exp(2000, 150, 3), origin_fallback: true }, originLoadingExperience: exp(2000, 150, 3) }))
+    res.end(JSON.stringify({ loadingExperience: { ...exp(2100, 120, 2), origin_fallback: false }, originLoadingExperience: exp(2000, 150, 3) }))
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const dir = mkdtempSync(join(tmpdir(), 'seo-cwv-'))
+  const F = join(dirname(SCRIPT), 'field-cwv.mjs')
+  const env = { ...process.env, FIELD_CWV_ENDPOINT: `http://127.0.0.1:${port}/psi`, PAGESPEED_API_KEY: '' }
+  await new Promise((resolve, reject) =>
+    execFile('node', [F, '--url', 'https://example.com/', '--url', 'https://example.com/slow', '--url', 'https://example.com/quiet', '--url', 'https://example.com/limited', '--json', join(dir, 'c.json'), '--md', join(dir, 'c.md')], { env }, (err) => (err ? reject(err) : resolve())),
+  )
+  server.close()
+  const r = JSON.parse(readFileSync(join(dir, 'c.json'), 'utf8'))
+  const [home, slow, quiet, limited] = r.pages
+  assert.deepEqual([home.page.passes, home.page.metrics.CLS.p75, home.page.metrics.LCP.rating], [true, 0.02, 'good'])
+  assert.deepEqual([slow.page.passes, slow.page.metrics.LCP.rating], [false, 'poor'])
+  assert.equal(quiet.page, null, 'origin fallback is not reported as page data')
+  assert.equal(quiet.origin.passes, true)
+  assert.match(limited.error, /429/)
+  assert.deepEqual(seen[0], ['https://example.com/', 'mobile', null], 'no key param when none is set')
+  assert.match(readFileSync(join(dir, 'c.md'), 'utf8'), /\| https:\/\/example\.com\/quiet \| origin only \|/)
+})
