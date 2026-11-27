@@ -1,7 +1,7 @@
 # crawlspace
 
 The Crawlspace Claude Code plugin (formerly `seo` in mtblck/claude-marketplace): skills in `skills/`, the shared
-checker, checklist and link-preview scripts in `scripts/`, the checklist page in `templates/`.
+checker, checklist, link-preview and Search Console scripts in `scripts/`, the checklist page in `templates/`.
 
 ## Commands
 

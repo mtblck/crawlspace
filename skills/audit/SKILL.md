@@ -80,8 +80,11 @@ Also, when you can:
 - **Core Web Vitals:** run the `pr-review:performance` skill's Lighthouse step or
   `npx @lhci/cli@0.15.1 collect` on the key templates. Field data (CrUX, Search
   Console) beats lab data; say which you have.
-- **Search Console / analytics:** only if the user provides exports or access.
-  Never claim index coverage or traffic numbers you didn't see.
+- **Search Console / analytics:** only if the user provides exports or a Search
+  Console MCP server is connected; then run the `search-console` skill's analysis
+  with `--checker` pointing at this run, so P1/P2 findings on pages that already
+  get impressions rank first. Never claim index coverage or traffic numbers you
+  didn't see.
 - **Structured data:** the script parses JSON-LD and lists types; the `schema`
   skill in this plugin goes deeper.
 

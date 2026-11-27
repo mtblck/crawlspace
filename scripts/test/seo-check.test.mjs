@@ -138,3 +138,50 @@ test('checklist.mjs builds the checklist and carries ticks over', async () => {
   const fixed = v2.sections.find((s) => s.id === 'fixed')
   assert.deepEqual(fixed.items.map((i) => [i.id, i.done]), [['finding.page.noindex-in-sitemap', true]])
 })
+
+test('gsc.mjs finds striking distance, low CTR, cannibalisation, drops and pages at risk', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'seo-gsc-'))
+  const S = 'https://example.com'
+  const now = [
+    'Query,Page,Clicks,Impressions,CTR,Position',
+    `svg converter,${S}/tool,40,1000,4%,3.1`,
+    `png to svg,${S}/tool,45,1000,4.5%,3.0`,
+    `trace image,${S}/tool,42,1000,4.2%,3.2`,
+    `"photo to svg, free",${S}/tool,5,1000,0.5%,2.9`,
+    `vector tracing,${S}/blog/trace,3,800,0.4%,12.4`,
+    `vector tracing,${S}/tool,2,400,0.5%,14.0`,
+    `logo to svg,${S}/blog/logo,10,900,1.1%,6.0`,
+    `tiny,${S}/tool,0,3,0%,40`,
+  ].join('\n')
+  const before = [
+    'Query,Page,Clicks,Impressions,CTR,Position',
+    `svg converter,${S}/tool,42,1000,4.2%,3.0`,
+    `logo to svg,${S}/blog/logo,80,900,8.9%,2.5`,
+    `png to svg,${S}/tool,60,1500,4%,3.0`,
+  ].join('\n')
+  writeFileSync(join(dir, 'now.csv'), now)
+  writeFileSync(join(dir, 'before.csv'), before)
+  writeFileSync(join(dir, 'seo.json'), JSON.stringify({ findings: [{ sev: 'P2', id: 'title.long', url: `${S}/tool` }, { sev: 'P3', id: 'img.alt', url: `${S}/blog/logo` }] }))
+  const G = join(dirname(SCRIPT), 'gsc.mjs')
+  const out = join(dir, 'g.json')
+  await new Promise((resolve, reject) =>
+    execFile('node', [G, '--rows', join(dir, 'now.csv'), '--previous', join(dir, 'before.csv'), '--checker', join(dir, 'seo.json'), '--json', out], (err) => (err ? reject(err) : resolve())),
+  )
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  assert.deepEqual(r.shape, { query: true, page: true, queryAndPage: true, rows: 8 })
+  assert.equal(r.totals.clicks, 147)
+  assert.deepEqual(r.striking.map((u) => u.query), ['vector tracing', 'vector tracing'])
+  assert.deepEqual(r.lowCtr.map((u) => u.query), ['photo to svg, free'], 'judged against the site’s own CTR at position 3')
+  assert.deepEqual(r.cannibal.map((c) => [c.query, c.pages.map((p) => new URL(p.page).pathname)]), [['vector tracing', ['/blog/trace', '/tool']]])
+  assert.deepEqual(r.drops.map((d) => [d.query, d.why.split(':')[0]]), [['logo to svg', 'ranking'], ['png to svg', 'demand or coverage']])
+  assert.deepEqual(r.atRisk.map((a) => [new URL(a.page).pathname, a.findings]), [['/tool', ['P2 title.long']]])
+
+  // the UI export: queries and pages in separate files
+  writeFileSync(join(dir, 'Queries.csv'), 'Top queries,Clicks,Impressions,CTR,Position\nsvg converter,40,1000,4%,9.5\n')
+  writeFileSync(join(dir, 'Pages.csv'), `Top pages,Clicks,Impressions,CTR,Position\n${S}/tool,90,4000,2.25%,4\n`)
+  await new Promise((resolve, reject) => execFile('node', [G, '--rows', join(dir, 'Queries.csv'), '--rows', join(dir, 'Pages.csv'), '--json', out], (err) => (err ? reject(err) : resolve())))
+  const u = JSON.parse(readFileSync(out, 'utf8'))
+  assert.equal(u.shape.queryAndPage, false)
+  assert.deepEqual(u.striking.map((x) => x.query), ['svg converter'])
+  assert.ok(u.skipped.some((s) => s.startsWith('cannibalisation')))
+})
