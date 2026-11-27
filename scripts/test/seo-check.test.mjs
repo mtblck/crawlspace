@@ -34,7 +34,7 @@ const png = (w, h) => {
   return b
 }
 
-function site(port) {
+function site(port, tweak) {
   const o = `http://localhost:${port}`
   const images = { '/icon.png': png(32, 32), '/og.png': png(1200, 630), '/small.png': png(100, 100), '/card.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>' }
   const routes = {
@@ -53,6 +53,7 @@ ${['/', '/about', '/dup-a', '/dup-b', '/secret', '/old', '/fr', '/en'].map((p) =
     '/en': [200, 'text/html', page({ title: 'English page', desc: 'An English test page that forgets to link back to the French one.', canonical: `${o}/en`, extraHead: `<link rel="alternate" hreflang="en" href="${o}/en">` })],
   }
   for (const r of Object.values(routes)) if (typeof r[2] === 'string') r[2] = r[2].replace('OGIMG', `${o}/og.png`)
+  tweak?.(routes, o)
   return createServer((req, res) => {
     const path = new URL(req.url, o).pathname
     if (images[path]) {
@@ -105,6 +106,38 @@ test('reports the planted problems', async () => {
   assert.equal(gpt.allowed, false)
   assert.equal(google.allowed, true)
   assert.deepEqual(r.pages.find((p) => p.url.endsWith(`${port}/`)).schemaTypes, ['Organization'])
+})
+
+test('--redirects grades each old URL', async () => {
+  const server = site(0)
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  server.close()
+  const go = (to, status = 301) => [status, 'text/html', '', { location: to }]
+  const real = site(port, (routes) => {
+    Object.assign(routes, {
+      '/moved-ok': go('/en'), '/moved-temp': go('/en', 302), '/chain1': go('/chain2'), '/chain2': go('/en'),
+      '/to-home': go('/'), '/to-noindex': go('/secret'), '/to-dead': go('/gone'), '/loop-a': go('/loop-b'), '/loop-b': go('/loop-a'),
+      '/wrong': go('/fr'), '/to-dup-b': go('/dup-b'), '/retired': [410, 'text/html', 'gone'],
+    })
+  })
+  await new Promise((r) => real.listen(port, '127.0.0.1', r))
+  const dir = mkdtempSync(join(tmpdir(), 'seo-redirects-'))
+  writeFileSync(join(dir, 'old.csv'), ['old,new', '/moved-ok,/en/', '/moved-temp', '/chain1', '/to-home', '/to-noindex', '/to-dead', '/loop-a', '/wrong,/en', '/to-dup-b', '/gone', '/retired', '/about,/en', '# a comment', ''].join('\n'))
+  const out = join(dir, 'r.json')
+  await new Promise((resolve) =>
+    execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max', '1', '--max-links', '0', '--redirects', join(dir, 'old.csv'), '--json', out], () => resolve()),
+  )
+  real.close()
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  const got = r.findings.filter((f) => f.id.startsWith('redirect.')).map((f) => `${new URL(f.url).pathname} ${f.id}`).sort()
+  assert.deepEqual(got, [
+    '/about redirect.missing', '/chain1 redirect.chain', '/gone redirect.missing', '/loop-a redirect.loop', '/moved-temp redirect.temporary',
+    '/retired redirect.gone', '/to-dead redirect.broken-target', '/to-dup-b redirect.target-canonical', '/to-home redirect.to-home',
+    '/to-noindex redirect.target-noindex', '/wrong redirect.wrong-target',
+  ])
+  assert.equal(r.redirects.listed, 12)
+  assert.equal(r.redirects.ok, 1, 'only /moved-ok is right (trailing slash ignored)')
 })
 
 test('checklist.mjs builds the checklist and carries ticks over', async () => {
