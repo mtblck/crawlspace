@@ -22,6 +22,12 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   TTFB) for each page and the whole origin from the PageSpeed Insights API, rated against Google's thresholds.
   The audit uses field data first and labels Lighthouse numbers as lab. It works without a key; set
   `PAGESPEED_API_KEY` for more quota. (#19)
+- `/crawlspace:page brief <query>` writes a content brief for a page that doesn't exist yet (intent and format
+  from what ranks, title, description, slug, an outline with the questions to answer and what only this site
+  can say, evidence to gather, internal links and schema), after checking no existing page already targets
+  the query. `/crawlspace:page refresh` builds a queue of pages to update, from lost Search Console clicks,
+  out-of-date content, real last-edit dates and striking-distance queries. The checker's JSON now includes
+  each page's sitemap `lastmod`. (#20)
 - `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
   and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
   canonical away, or lost its share image, structured data or most of its words; a search crawler newly
