@@ -1,0 +1,92 @@
+name: Release
+
+# Tags and publishes a GitHub release for each version, the way mtblck/seedkin
+# does (its ADR 0016), minus npm:
+# - Release PR: a merge to main that changes `version` in .claude-plugin/plugin.json
+#   tags that commit vX.Y.Z and makes the GitHub release from that version's
+#   CHANGELOG section. Merging the release PR is the approval. The tag is made
+#   with this run's token, so it doesn't start another workflow run.
+# - Run workflow (workflow_dispatch) with a version and a commit tags an earlier
+#   release, for versions released before this workflow existed.
+# A version that's already tagged is left alone. Then bump the sha pin in
+# mtblck/claude-marketplace.
+on:
+  push:
+    branches: [main]
+    paths: [.claude-plugin/plugin.json, .github/workflows/release.yml]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to tag, such as 2.0.0
+        required: true
+      sha:
+        description: The release commit (its plugin.json must have that version)
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # To create the tag and the GitHub release.
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Version to release
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_SHA: ${{ inputs.sha }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            sha=$(git rev-parse --verify "$IN_SHA^{commit}") || { echo "::error::$IN_SHA isn't a commit in this repo."; exit 1; }
+            git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$IN_SHA isn't on main."; exit 1; }
+            version=$(git show "$sha:.claude-plugin/plugin.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+            if [ "$version" != "$IN_VERSION" ]; then echo "::error::plugin.json at $IN_SHA is $version, not $IN_VERSION."; exit 1; fi
+          else
+            sha=$GITHUB_SHA
+            version=$(node -p "require('./.claude-plugin/plugin.json').version")
+            checker=$(sed -n "s/^const VERSION = '\(.*\)'$/\1/p" scripts/seo-check.mjs)
+            if [ "$checker" != "$version" ]; then echo "::error::plugin.json is $version but VERSION in scripts/seo-check.mjs is $checker."; exit 1; fi
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ -n "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+            echo "::notice::v$version is already tagged; nothing to do."
+            exit 0
+          fi
+          if ! git show "$sha:CHANGELOG.md" | grep -q "^## \[$version\] - "; then
+            echo "::error::CHANGELOG.md has no '## [$version] - date' section at $sha."
+            exit 1
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+      - name: Tag the release commit
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$SHA" --silent
+      - name: GitHub release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          # This version's CHANGELOG section: from its heading to the next heading.
+          git show "$SHA:CHANGELOG.md" | awk -v v="${TAG#v}" '/^## / { on = index($0, "## [" v "]") == 1; next } /^\[.*\]: / { exit } on' > notes.md
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TAG" --notes-file notes.md --verify-tag
