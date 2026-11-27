@@ -71,6 +71,16 @@ only follows links in the raw HTML, so a page reachable only through JavaScript
 counts as an orphan: that is the point, since crawlers that don't render can't
 find it either.
 
+When an earlier run's JSON exists (a previous audit, the run before a fix or a
+deploy, a production run to compare a local build against), add
+`--baseline <earlier>.json`. It fetches every baseline page again and grades what
+regressed as `drift.*` findings: a page that stopped answering 200, became
+noindex, moved its canonical away from itself or lost its share image,
+structured data types or most of its words, a search crawler newly blocked, a
+sitemap that shrank. Other differences (titles, descriptions, H1s) are listed
+under "Changes to confirm are intended", not graded. Pages match by path, so a
+production baseline works against a local build.
+
 **After a migration or a URL change** (new domain, new routes, a CMS move), get
 the old URLs: the old sitemap (from git history or the Wayback Machine), a Search
 Console Pages export, or the old route list in the code. Put them in a file,
@@ -152,8 +162,8 @@ repo, unless asked):
 4. **What wasn't checked** (field CWV, Search Console, backlinks, live host
    checks on a local build) and how to check it, plus the "Set up once per
    site" items from `checklist.md` that aren't confirmed done.
-5. **Next run:** the exact command to re-run the checker, so the score can be
-   compared.
+5. **Next run:** the exact command to re-run the checker with
+   `--baseline seo-live.json`, so the next run shows what changed.
 
 Then make the **launch checklist**, an interactive page where the owner ticks
 off fixes and set-up steps and leaves notes:
@@ -191,6 +201,7 @@ Lead the reply with the summary, then link the report and the checklist.
    current options and their maintenance before picking one.
    Propose it with its cost before doing it; it changes the build.
 3. Build and run the repo's checks after each change. Re-run the checker against
-   a fresh build and show the finding gone. "Should be fixed" isn't a result.
+   a fresh build with `--baseline` set to the run before the fix, and show the
+   finding gone and no `drift.*` regressions. "Should be fixed" isn't a result.
 4. Open a PR in the repo's normal way, with the before/after checker summary in
    the description.

@@ -11,6 +11,12 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
 
 ### Added
 
+- `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
+  and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
+  canonical away, or lost its share image, structured data or most of its words; a search crawler newly
+  blocked; a shrinking sitemap), lists title, description and H1 changes to confirm, and shows the score and
+  the kinds of finding gained and gone. P1 drift fails the run, so it can gate a deploy. The audit skill uses it
+  to prove fixes. (#13)
 - `seo-check.mjs --redirects FILE` checks a migration's redirects: give it the old URLs or paths (a list, an
   `old,new` CSV or the old sitemap) and it flags each that doesn't 301/308 in one hop to a live, indexable page
   that is its own canonical (missing, temporary, chained or looping redirects, redirects to the home page or to
