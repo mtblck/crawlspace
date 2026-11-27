@@ -28,6 +28,13 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   clicks with whether position, impressions or CTR moved, and puts checker findings on pages that already get
   impressions first. The skill also sorts URL Inspection and Page indexing results into what each needs.
   `audit` and `keywords` hand off to it. (#15)
+- `/crawlspace:links` writes an internal linking plan: specific links to add (source page, anchor text,
+  target), hub pages for topics that lack one, and anchors to rewrite, based on the site's real link graph and
+  the keyword map.
+- The checker's `--crawl` now records, per page, how many pages link to it, which ones, and the anchor texts
+  used, telling navigation links (on 80%+ of pages) from links in the content (`crawl.nodes` in the JSON). New
+  P3 findings: `links.few-inbound` (non-navigation pages with one internal link or none) and
+  `links.generic-anchor` ("read more", "click here"). (#16)
 
 ## [2.0.0] - 2026-11-25
 

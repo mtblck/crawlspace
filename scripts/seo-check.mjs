@@ -817,6 +817,9 @@ async function main() {
 async function crawlGraph(home, inSitemap) {
   const depth = new Map([[norm(home.finalUrl), 0]])
   const queue = [norm(home.finalUrl)]
+  const meta = new Map() // url -> { title, h1 }
+  const edges = new Map() // target -> Map(source -> anchor texts)
+  const outCount = new Map()
   let pages = 0
   while (queue.length && pages < CRAWL) {
     const u = queue.shift()
@@ -824,13 +827,24 @@ async function crawlGraph(home, inSitemap) {
     pages++
     if (r.status !== 200 || !/html/i.test(r.headers['content-type'] || '')) continue
     const d = depth.get(u)
-    for (const l of extract(r.body, r.finalUrl).links) {
+    const ex = extract(r.body, r.finalUrl)
+    meta.set(u, { title: ex.title, h1: ex.h1[0] || null })
+    const targets = new Set()
+    for (const l of ex.links) {
       if (!l.abs || !sameSite(l.abs) || /nofollow/i.test(l.rel)) continue
       const n = norm(l.abs)
-      if (depth.has(n) || /\.(png|jpe?g|gif|webp|avif|svg|pdf|zip|ico|xml|txt|json|css|js)$/i.test(new URL(n).pathname)) continue
+      if (/\.(png|jpe?g|gif|webp|avif|svg|pdf|zip|ico|xml|txt|json|css|js)$/i.test(new URL(n).pathname)) continue
+      if (n !== u) {
+        targets.add(n)
+        const from = edges.get(n) || new Map()
+        from.set(u, [...(from.get(u) || []), l.text].slice(0, 5))
+        edges.set(n, from)
+      }
+      if (depth.has(n)) continue
       depth.set(n, d + 1)
       queue.push(n)
     }
+    outCount.set(u, targets.size)
   }
   const capped = queue.length > 0
   const deep = [...depth].filter(([, d]) => d > 3).map(([u, d]) => `${u} (${d})`)
@@ -844,7 +858,39 @@ async function crawlGraph(home, inSitemap) {
       else add('P2', 'crawl.orphan', `${orphans.length} sitemap URL(s) aren't linked from any page reachable from the home page (orphans): ${orphans.slice(0, 4).join(', ')}${orphans.length > 4 ? ' …' : ''}. Link each from a related page.`, url)
     }
   }
-  return { pages, limit: CRAWL, capped, maxDepth: Math.max(...depth.values()), orphans, deep: deep.length }
+
+  // Inbound links per page. A link on most crawled pages is navigation (header,
+  // footer); the rest are contextual, the links that say what a page is about.
+  const fetched = [...meta.keys()]
+  const siteWide = new Set([...edges].filter(([, from]) => fetched.length >= 5 && from.size >= fetched.length * 0.8).map(([t]) => t))
+  const nodes = fetched.map((u) => {
+    const from = edges.get(u) || new Map()
+    const anchors = new Map()
+    for (const texts of from.values()) for (const t of texts) if (t) anchors.set(t, (anchors.get(t) || 0) + 1)
+    return {
+      url: u,
+      depth: depth.get(u),
+      inSitemap: inSitemap.has(u),
+      title: meta.get(u).title,
+      h1: meta.get(u).h1,
+      inbound: from.size,
+      contextual: siteWide.has(u) ? null : from.size,
+      outbound: outCount.get(u) || 0,
+      navigation: siteWide.has(u),
+      anchors: [...anchors].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
+      from: [...from.keys()].slice(0, 20),
+    }
+  })
+  if (!capped && fetched.length >= 5) {
+    const thin = nodes.filter((n) => n.depth > 0 && !n.navigation && n.inbound <= 1)
+    if (thin.length) add('P3', 'links.few-inbound', `${thin.length} page(s) have at most one internal link pointing at them: ${thin.slice(0, 4).map((n) => n.url).join(', ')}${thin.length > 4 ? ' …' : ''}. Link each from related pages with descriptive anchor text.`, url)
+  }
+  const GENERIC = /^(click here|here|read more|more|learn more|link|this|this page|continue|details|go|see more)$/i
+  const generic = []
+  for (const [t, from] of edges) for (const [s, texts] of from) if (texts.some((x) => GENERIC.test(x.trim()))) generic.push(`${s} → ${t}`)
+  if (generic.length) add('P3', 'links.generic-anchor', `${generic.length} internal link(s) use anchor text that says nothing about the target ("read more", "click here"): ${generic.slice(0, 3).join(', ')}${generic.length > 3 ? ' …' : ''}.`, url)
+
+  return { pages, limit: CRAWL, capped, maxDepth: Math.max(...depth.values()), orphans, deep: deep.length, nodes }
 }
 
 async function checkIcons(home, robots) {

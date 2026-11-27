@@ -69,7 +69,8 @@ page: it reports click depth (pages more than three clicks deep), orphans
 tracking parameters, mixed trailing slashes, http links on an https site). It
 only follows links in the raw HTML, so a page reachable only through JavaScript
 counts as an orphan: that is the point, since crawlers that don't render can't
-find it either.
+find it either. The JSON's `crawl.nodes` has inbound links and anchors per page;
+for a plan of links to add, hand off to the `links` skill.
 
 When an earlier run's JSON exists (a previous audit, the run before a fix or a
 deploy, a production run to compare a local build against), add

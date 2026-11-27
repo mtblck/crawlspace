@@ -216,6 +216,31 @@ test('checklist.mjs builds the checklist and carries ticks over', async () => {
   assert.deepEqual(fixed.items.map((i) => [i.id, i.done]), [['finding.page.noindex-in-sitemap', true]])
 })
 
+test('--crawl counts inbound links, tells navigation from contextual links, flags weak ones', async () => {
+  const nav = '<nav><a href="/">Home</a><a href="/a">Guides</a><a href="/b">Tools</a><a href="/c">About</a></nav>'
+  const body = { '/': '', '/a': '<p><a href="/d">read more</a></p>', '/b': '<p><a href="/a">our tracing guides</a></p>', '/c': '', '/d': '<p><a href="/e">vector tracing tips</a></p>', '/e': '' }
+  const server = createServer((req, res) => {
+    const path = new URL(req.url, 'http://x').pathname
+    if (!(path in body)) return res.writeHead(404).end()
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end(`<!doctype html><html lang="en"><head><title>Page ${path} of the link fixture</title></head><body>${nav}<h1>Page ${path}</h1>${body[path]}</body></html>`)
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const out = join(mkdtempSync(join(tmpdir(), 'seo-links-')), 'r.json')
+  await new Promise((resolve) => execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max', '2', '--crawl', '20', '--json', out], () => resolve()))
+  server.close()
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  const node = (path) => r.crawl.nodes.find((n) => new URL(n.url).pathname === path)
+  assert.deepEqual(['/', '/a', '/b', '/c', '/d', '/e'].map((p) => node(p).navigation), [true, true, true, true, false, false])
+  assert.equal(node('/a').inbound, 5, 'the five other pages link /a; /b linking it twice counts once')
+  assert.deepEqual([node('/d').inbound, node('/d').anchors, node('/d').depth], [1, ['read more'], 2])
+  assert.deepEqual(node('/e').anchors, ['vector tracing tips'])
+  const few = r.findings.find((f) => f.id === 'links.few-inbound')
+  assert.match(few.msg, /^2 page\(s\)/)
+  assert.ok(r.findings.some((f) => f.id === 'links.generic-anchor' && /\/a → .*\/d/.test(f.msg)))
+})
+
 test('gsc.mjs finds striking distance, low CTR, cannibalisation, drops and pages at risk', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'seo-gsc-'))
   const S = 'https://example.com'
