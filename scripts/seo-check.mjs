@@ -110,8 +110,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const cache = new Map()
 
 // GET with redirects followed by hand, so the chain is on record.
-async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' } = {}) {
-  if (cache.has(url)) return cache.get(url)
+async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', ua = UA } = {}) {
+  const key = ua === UA && accept.startsWith('text/html') ? url : `${ua}|${accept}|${url}`
+  if (cache.has(key)) return cache.get(key)
   const chain = []
   let current = url
   let res
@@ -119,11 +120,11 @@ async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), TIMEOUT)
     try {
-      res = await fetch(current, { redirect: 'manual', signal: ctrl.signal, headers: { 'user-agent': UA, accept } })
+      res = await fetch(current, { redirect: 'manual', signal: ctrl.signal, headers: { 'user-agent': ua, accept } })
     } catch (e) {
       clearTimeout(t)
       const out = { url, finalUrl: current, status: 0, error: e.cause?.code || e.name || String(e), chain, headers: {}, body: '' }
-      cache.set(url, out)
+      cache.set(key, out)
       return out
     }
     clearTimeout(t)
@@ -141,7 +142,7 @@ async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml
   const textual = /text|xml|json|javascript/.test(type) || type === ''
   const body = textual ? await res.text().catch(() => '') : (await res.arrayBuffer().catch(() => {}), '')
   const out = { url, finalUrl: current, status: res.status, chain, headers, body, tooManyHops: chain.length > maxHops }
-  cache.set(url, out)
+  cache.set(key, out)
   await sleep(DELAY)
   return out
 }
@@ -253,6 +254,7 @@ function extract(html, pageUrl) {
 function parseRobots(txt) {
   const groups = []
   const sitemaps = []
+  const signals = []
   let cur = null
   let lastWasAgent = false
   for (const raw of txt.split(/\r?\n/)) {
@@ -270,11 +272,14 @@ function parseRobots(txt) {
       lastWasAgent = false
     } else if (key === 'sitemap') {
       sitemaps.push(val)
+    } else if (key === 'content-signal') {
+      signals.push({ agents: cur ? [...cur.agents] : ['*'], value: val })
+      lastWasAgent = false
     } else {
       lastWasAgent = false
     }
   }
-  return { groups, sitemaps }
+  return { groups, sitemaps, signals }
 }
 
 function ruleMatches(pattern, path) {
@@ -400,7 +405,7 @@ async function main() {
   // robots.txt
   const robotsRes = await get(`${origin}/robots.txt`, { accept: 'text/plain,*/*;q=0.5' })
   let robots = { groups: [], sitemaps: [] }
-  const robotsInfo = { status: robotsRes.status, finalUrl: robotsRes.finalUrl }
+  const robotsInfo = { status: robotsRes.status, finalUrl: robotsRes.finalUrl, contentSignals: [] }
   if (robotsRes.status >= 500 || robotsRes.status === 0) {
     add('P1', 'robots.unreachable', `robots.txt answers ${robotsRes.status || robotsRes.error}; Google treats a 5xx robots.txt as "disallow everything" until it recovers.`, robotsRes.url)
   } else if (robotsRes.status === 200 && /<html/i.test(robotsRes.body.slice(0, 500))) {
@@ -408,6 +413,7 @@ async function main() {
   } else if (robotsRes.status === 200) {
     robots = parseRobots(robotsRes.body)
     robotsInfo.body = robotsRes.body.slice(0, 4000)
+    robotsInfo.contentSignals = robots.signals
     if (!robots.sitemaps.length) add('P3', 'robots.no-sitemap', 'robots.txt has no Sitemap: line.', robotsRes.url)
   } else {
     add('P3', 'robots.missing', `No robots.txt (${robotsRes.status}). Crawlers treat that as "allow all"; add one with a Sitemap: line.`, robotsRes.url)
@@ -716,6 +722,11 @@ async function main() {
   const llms = await get(`${origin}/llms.txt`, { accept: 'text/plain,text/markdown,*/*;q=0.5' })
   const llmsInfo = { status: llms.status, present: llms.status === 200 && !/<html/i.test(llms.body.slice(0, 300)) }
 
+  // agents: is there a Markdown version for agents, and does the server treat
+  // AI fetchers like everyone else? Reported; only a block robots.txt doesn't
+  // ask for is graded.
+  const agents = await checkAgents(home, matrix)
+
   // redirects after a migration: every old URL given, one at a time
   let redirects = null
   if (redirectList) {
@@ -795,6 +806,7 @@ async function main() {
     crawlers: matrix.map(({ agent, kind, allowed, rule }) => ({ agent, kind, allowed, rule })),
     sitemaps: { files: sm.files, errors: sm.errors, urlCount: sm.urls.length },
     llmsTxt: llmsInfo,
+    agents,
     icons: iconInfo,
     pages: pagesOut,
     linksChecked: checkedLinks,
@@ -810,6 +822,34 @@ async function main() {
   if (opt('md')) writeFileSync(String(opt('md')), md)
   console.log(md)
   process.exit(counts.P1 ? 1 : 0)
+}
+
+// AI fetchers' user agents, as the operators document them (short forms are
+// enough for user-agent matching).
+const AGENT_UAS = [
+  ['OAI-SearchBot', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot'],
+  ['ChatGPT-User', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot'],
+  ['Claude-User', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Claude-User/1.0; +Claude-User@anthropic.com'],
+  ['PerplexityBot', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot'],
+]
+const CHALLENGE = /cf-chl|challenge-platform|just a moment\.\.\.|attention required|vercel security checkpoint|captcha/i
+
+async function checkAgents(home, matrix) {
+  const out = { markdown: null, markdownLink: null, probes: [] }
+  const md = await get(home.finalUrl, { accept: 'text/markdown, text/html;q=0.5' })
+  if (md.status === 200 && /text\/markdown/i.test(md.headers['content-type'] || '')) out.markdown = 'served for Accept: text/markdown'
+  const link = tags((home.body.match(/<head\b[\s\S]*?<\/head\s*>/i) || [''])[0], 'link').find((a) => /alternate/i.test(a.rel || '') && /text\/markdown/i.test(a.type || ''))
+  if (link) out.markdownLink = link.href || ''
+  if (home.status !== 200) return out
+  for (const [agent, ua] of AGENT_UAS) {
+    const r = await get(home.finalUrl, { ua })
+    const challenged = r.status === 200 && CHALLENGE.test(r.body.slice(0, 5000))
+    const blocked = (r.status >= 400 && r.status !== 404) || r.status === 0 || challenged
+    out.probes.push({ agent, status: r.status, challenged })
+    const allowed = matrix.find((c) => c.agent === agent)?.allowed !== false
+    if (blocked && allowed) add('P3', 'agents.blocked', `robots.txt allows ${agent}, but a request with its user agent got ${challenged ? 'a bot challenge page' : r.status || r.error}. A firewall or bot protection may be blocking it; real crawlers come from verified IP ranges, so confirm in the host's bot settings.`, home.finalUrl)
+  }
+  return out
 }
 
 // Breadth-first walk over raw-HTML <a href> links, as a crawler that doesn't run
@@ -993,6 +1033,10 @@ function report(r) {
   for (const c of r.crawlers) L.push(`| ${c.agent} | ${c.kind} | ${c.allowed ? 'yes' : '**no**'} | ${c.rule || '(no matching rule)'} |`)
   if (r.icons) L.push('', `Icons: favicon ${r.icons.favicons.map((f) => `${f.url} (${f.status}${f.size ? `, ${f.size}` : ''})`).join(', ') || 'none'} · apple-touch-icon ${r.icons.appleTouchIcon ? 'yes' : 'no'} · manifest ${r.icons.manifest ? (r.icons.manifest.valid ? 'yes' : 'broken') : 'no'} · theme-color ${r.icons.themeColor || 'none'}`)
   L.push('', `robots.txt: ${r.robots.status} · Sitemap lines: ${r.robots.sitemaps.join(', ') || 'none'} · llms.txt: ${r.llmsTxt.present ? 'present' : 'absent'} (optional; not graded)`)
+  if (r.agents) {
+    const sig = r.robots.contentSignals || []
+    L.push('', `Agents: Content-Signal ${sig.length ? sig.map((s) => `\`${s.value}\` (${s.agents.join(', ')})`).join('; ') : 'none'} · Markdown version ${r.agents.markdown || (r.agents.markdownLink ? `linked (${r.agents.markdownLink})` : 'none')}${r.agents.probes.length ? ` · home page as ${r.agents.probes.map((p) => `${p.agent} ${p.challenged ? 'challenge' : p.status}`).join(', ')}` : ''} (not graded)`)
+  }
   L.push('', '## Pages', '', '| URL | Status | Title | Words raw / rendered | Canonical | Schema |', '| --- | --- | --- | --- | --- | --- |')
   for (const p of r.pages) {
     const t = (p.title || p.renderedTitle || '').replace(/\|/g, '\\|').slice(0, 60)
