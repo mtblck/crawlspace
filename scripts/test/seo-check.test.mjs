@@ -288,3 +288,102 @@ test('gsc.mjs finds striking distance, low CTR, cannibalisation, drops and pages
   assert.deepEqual(u.striking.map((x) => x.query), ['svg converter'])
   assert.ok(u.skipped.some((s) => s.startsWith('cannibalisation')))
 })
+
+test('agents: Content-Signal, Markdown for agents, and AI user agents the server blocks', async () => {
+  const server = createServer((req, res) => {
+    const path = new URL(req.url, 'http://x').pathname
+    const ua = req.headers['user-agent'] || ''
+    if (path === '/robots.txt') {
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      return res.end('User-agent: *\nContent-Signal: search=yes, ai-input=yes, ai-train=no\nAllow: /\n\nUser-agent: OAI-SearchBot\nDisallow: /\n')
+    }
+    if (path !== '/') return res.writeHead(404).end()
+    if (/ChatGPT-User|OAI-SearchBot/.test(ua)) return res.writeHead(403).end('Forbidden')
+    if (/PerplexityBot/.test(ua)) {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      return res.end('<html><head><title>Just a moment...</title></head><body>cf-chl</body></html>')
+    }
+    if (/text\/markdown/.test(req.headers.accept || '')) {
+      res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' })
+      return res.end('# Home\n')
+    }
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<!doctype html><html lang="en"><head><title>Agents fixture home page</title></head><body><h1>Home</h1></body></html>')
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const out = join(mkdtempSync(join(tmpdir(), 'seo-agents-')), 'r.json')
+  await new Promise((resolve) => execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max', '1', '--json', out], () => resolve()))
+  server.close()
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  assert.deepEqual(r.robots.contentSignals, [{ agents: ['*'], value: 'search=yes, ai-input=yes, ai-train=no' }])
+  assert.equal(r.agents.markdown, 'served for Accept: text/markdown')
+  const blocked = r.findings.filter((f) => f.id === 'agents.blocked').map((f) => f.msg.match(/allows (\S+),/)[1]).sort()
+  assert.deepEqual(blocked, ['ChatGPT-User', 'PerplexityBot'], 'OAI-SearchBot is blocked in robots.txt too, so its 403 is intended')
+  assert.ok(r.agents.probes.find((p) => p.agent === 'PerplexityBot').challenged)
+})
+
+test('images: weight, format, srcset and a lazy-loaded first image', async () => {
+  const big = Buffer.concat([png(1600, 900), Buffer.alloc(1200 * 1024)])
+  const mid = Buffer.concat([png(800, 600), Buffer.alloc(150 * 1024)])
+  const wideSmall = Buffer.concat([png(1200, 600), Buffer.alloc(10 * 1024)])
+  const imgs = { '/big.png': big, '/mid.png': mid, '/wide.png': wideSmall, '/wide-ok.png': wideSmall }
+  const html = `<!doctype html><html lang="en"><head><title>Images fixture home page</title></head><body><h1>Home</h1>
+<img src="/big.png" alt="hero" width="1600" height="900" loading="lazy">
+<img src="/mid.png" alt="m" width="800" height="600">
+<img src="/wide.png" alt="w" width="1200" height="600">
+<img src="/wide-ok.png" srcset="/wide-ok.png 1200w" alt="ok" width="1200" height="600">
+<picture><source srcset="/wide-ok.png"><img src="/wide-ok.png" alt="p" width="1200" height="600"></picture>
+<img src="https://cdn.example.net/x.png" alt="cdn" width="10" height="10"></body></html>`
+  const server = createServer((req, res) => {
+    const path = new URL(req.url, 'http://x').pathname
+    if (imgs[path]) return res.writeHead(200, { 'content-type': 'image/png' }).end(imgs[path])
+    if (path !== '/') return res.writeHead(404).end()
+    res.writeHead(200, { 'content-type': 'text/html' }).end(html)
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const out = join(mkdtempSync(join(tmpdir(), 'seo-images-')), 'r.json')
+  await new Promise((resolve) => execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max', '1', '--json', out], () => resolve()))
+  server.close()
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  const f = Object.fromEntries(r.findings.filter((x) => x.id.startsWith('img.')).map((x) => [x.id, x]))
+  assert.equal(f['img.lcp-lazy']?.sev, 'P2')
+  assert.equal(f['img.heavy']?.sev, 'P2', 'over 1 MB is P2')
+  assert.match(f['img.heavy'].msg, /^1 image/)
+  assert.match(f['img.format'].msg, /^2 JPEG\/PNG\/GIF/)
+  assert.match(f['img.srcset'].msg, /^2 image\(s\)/, 'big.png and wide.png; srcset and <picture> are fine')
+  assert.deepEqual(r.images, { measured: 5, otherHost: 1, skipped: 0 }, 'five same-site <img> elements, one on a CDN')
+})
+
+test('field-cwv.mjs reads CrUX p75 from PageSpeed Insights, page and origin', async () => {
+  const exp = (lcp, inp, cls) => ({ metrics: { LARGEST_CONTENTFUL_PAINT_MS: { percentile: lcp }, INTERACTION_TO_NEXT_PAINT: { percentile: inp }, CUMULATIVE_LAYOUT_SHIFT_SCORE: { percentile: cls }, FIRST_CONTENTFUL_PAINT_MS: { percentile: 1200 } } })
+  const seen = []
+  const server = createServer((req, res) => {
+    const q = new URL(req.url, 'http://x').searchParams
+    seen.push([q.get('url'), q.get('strategy'), q.get('key')])
+    if (q.get('url').endsWith('/limited')) return res.writeHead(429).end('{}')
+    res.writeHead(200, { 'content-type': 'application/json' })
+    if (q.get('url').endsWith('/slow')) return res.end(JSON.stringify({ loadingExperience: { ...exp(4100, 180, 5), origin_fallback: false }, originLoadingExperience: exp(2000, 150, 3) }))
+    if (q.get('url').endsWith('/quiet')) return res.end(JSON.stringify({ loadingExperience: { ...exp(2000, 150, 3), origin_fallback: true }, originLoadingExperience: exp(2000, 150, 3) }))
+    res.end(JSON.stringify({ loadingExperience: { ...exp(2100, 120, 2), origin_fallback: false }, originLoadingExperience: exp(2000, 150, 3) }))
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const dir = mkdtempSync(join(tmpdir(), 'seo-cwv-'))
+  const F = join(dirname(SCRIPT), 'field-cwv.mjs')
+  const env = { ...process.env, FIELD_CWV_ENDPOINT: `http://127.0.0.1:${port}/psi`, PAGESPEED_API_KEY: '' }
+  await new Promise((resolve, reject) =>
+    execFile('node', [F, '--url', 'https://example.com/', '--url', 'https://example.com/slow', '--url', 'https://example.com/quiet', '--url', 'https://example.com/limited', '--json', join(dir, 'c.json'), '--md', join(dir, 'c.md')], { env }, (err) => (err ? reject(err) : resolve())),
+  )
+  server.close()
+  const r = JSON.parse(readFileSync(join(dir, 'c.json'), 'utf8'))
+  const [home, slow, quiet, limited] = r.pages
+  assert.deepEqual([home.page.passes, home.page.metrics.CLS.p75, home.page.metrics.LCP.rating], [true, 0.02, 'good'])
+  assert.deepEqual([slow.page.passes, slow.page.metrics.LCP.rating], [false, 'poor'])
+  assert.equal(quiet.page, null, 'origin fallback is not reported as page data')
+  assert.equal(quiet.origin.passes, true)
+  assert.match(limited.error, /429/)
+  assert.deepEqual(seen[0], ['https://example.com/', 'mobile', null], 'no key param when none is set')
+  assert.match(readFileSync(join(dir, 'c.md'), 'utf8'), /\| https:\/\/example\.com\/quiet \| origin only \|/)
+})

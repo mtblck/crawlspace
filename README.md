@@ -106,7 +106,7 @@ It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-market
 | `/crawlspace:keywords [url \| topic] [competitors]` | Keyword research without paid tools: queries from the site, search results, People Also Ask, forums and Search Console data, one primary query per page, cannibalisation and gaps, `keywords.md` and a CSV. |
 | `/crawlspace:search-console [exports]` | Google's own numbers, from a Search Console export or MCP server: striking-distance queries, low CTR for the position, real cannibalisation, why clicks dropped (ranking, demand or CTR), indexing states, and checker findings on pages that already get impressions. |
 | `/crawlspace:links [url]` | Internal linking plan from the real link graph: orphans, buried pages, pages with one link or none, vague anchors, missing hubs, and specific links to add (source, anchor, target), using the keyword map when there is one. |
-| `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, each call labelled documented or judgement. |
+| `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, and agent readiness (Content-Signal, Markdown for agents, firewalls blocking AI fetchers), each call labelled documented or judgement. |
 
 Claude also picks them up from their descriptions: "why isn't this page indexed?", "check how this
 link looks on Slack".
@@ -115,7 +115,8 @@ link looks on Slack".
 
 `scripts/seo-check.mjs` is the evidence collector the skills share. It needs Node 18 or newer and
 nothing else, and renders pages with Playwright when Playwright is already installed. It only sends
-GET requests to the site it's pointed at, plus any old URLs you list with `--redirects`.
+GET requests to the site it's pointed at, plus any old URLs you list with `--redirects`. Four of
+them fetch the home page with AI fetchers' user agents, to see whether bot protection blocks them.
 
 ```
 node scripts/seo-check.mjs --url https://example.com --max 30 --md seo.md --json seo.json
@@ -130,7 +131,7 @@ AI search fetchers, training crawlers and control tokens), the sitemap or sitema
 index, and an even sample of sitemap URLs (or a crawl from the home page), then
 checks status codes, redirects, noindex in sitemaps, titles and descriptions
 (missing, length, duplicates), canonicals and their targets, `lang`, viewport,
-headings, images, JSON-LD parsing, Open Graph and Twitter card tags (fetching each share
+headings, images (alt text, size attributes, and for same-site images their weight, format, `srcset` and a lazy-loaded first image), JSON-LD parsing, Open Graph and Twitter card tags (fetching each share
 image to check its status, type, file size, pixel size and ratio), mixed content, hreflang
 codes and return links, internal link status, favicons, apple-touch-icon, manifest and
 theme-color, soft 404s, http → https and www/apex consolidation (live sites only), and what only appears after JavaScript runs.
@@ -158,6 +159,13 @@ only, the way the scrapers see it. The layouts are close approximations, not pix
 <p align="center">
   <img src=".github/readme/previews.webp" alt="Link previews for Harbor's blog post on Slack, Facebook, X, LinkedIn and iMessage, each with its title, description and the Harbor share image" width="560" />
 </p>
+
+### Field Core Web Vitals
+
+`scripts/field-cwv.mjs --url <page> [--url ...]` gets real-user LCP, INP and CLS (Chrome UX Report,
+75th percentile) for each page and its whole origin from Google's PageSpeed Insights API, and says
+which pass. It contacts Google, not your site. It works without a key at a small shared quota; set
+`PAGESPEED_API_KEY` for more.
 
 ### Search Console rows
 

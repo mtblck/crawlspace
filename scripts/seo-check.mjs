@@ -43,6 +43,7 @@ if (argv.includes('--help') || argv.includes('-h') || !opt('url')) {
   --pages LIST      comma-separated paths or URLs to always include
   --render MODE     auto (default: render with Playwright when installed), on, off
   --max-links N     internal links to status-check (default 150, 0 to skip)
+  --max-images N    same-site images to download and measure (default 150, 0 to skip)
   --crawl N         follow internal links from the home page up to N pages to
                     measure click depth and find orphan sitemap URLs (default 0: off)
   --json FILE       write the full result as JSON
@@ -95,6 +96,7 @@ if (opt('baseline')) {
 const BASE_PATHS = baseline ? baselinePaths(baseline) : []
 const MAX = Math.max(Number(opt('max', 25)), BASE_PATHS.length + 1)
 const MAX_LINKS = Number(opt('max-links', 150))
+const MAX_IMAGES = Number(opt('max-images', 150))
 const CRAWL = Number(opt('crawl', 0))
 const RENDER = String(opt('render', 'auto'))
 const TIMEOUT = Number(opt('timeout', 15000))
@@ -110,8 +112,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const cache = new Map()
 
 // GET with redirects followed by hand, so the chain is on record.
-async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' } = {}) {
-  if (cache.has(url)) return cache.get(url)
+async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', ua = UA } = {}) {
+  const key = ua === UA && accept.startsWith('text/html') ? url : `${ua}|${accept}|${url}`
+  if (cache.has(key)) return cache.get(key)
   const chain = []
   let current = url
   let res
@@ -119,11 +122,11 @@ async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), TIMEOUT)
     try {
-      res = await fetch(current, { redirect: 'manual', signal: ctrl.signal, headers: { 'user-agent': UA, accept } })
+      res = await fetch(current, { redirect: 'manual', signal: ctrl.signal, headers: { 'user-agent': ua, accept } })
     } catch (e) {
       clearTimeout(t)
       const out = { url, finalUrl: current, status: 0, error: e.cause?.code || e.name || String(e), chain, headers: {}, body: '' }
-      cache.set(url, out)
+      cache.set(key, out)
       return out
     }
     clearTimeout(t)
@@ -141,7 +144,7 @@ async function get(url, { maxHops = 5, accept = 'text/html,application/xhtml+xml
   const textual = /text|xml|json|javascript/.test(type) || type === ''
   const body = textual ? await res.text().catch(() => '') : (await res.arrayBuffer().catch(() => {}), '')
   const out = { url, finalUrl: current, status: res.status, chain, headers, body, tooManyHops: chain.length > maxHops }
-  cache.set(url, out)
+  cache.set(key, out)
   await sleep(DELAY)
   return out
 }
@@ -222,7 +225,14 @@ function extract(html, pageUrl) {
     const a = attrs(m[1])
     return { href: a.href ?? null, abs: a.href ? abs(a.href) : null, rel: a.rel || '', text: squash(m[2]).slice(0, 80) }
   })
-  const images = tags(body, 'img').map((a) => ({ src: a.src || a['data-src'] || '', alt: 'alt' in a ? a.alt : null, width: a.width, height: a.height, role: a.role, hidden: 'aria-hidden' in a }))
+  const images = tags(body, 'img').map((a) => ({ src: a.src || a['data-src'] || '', abs: a.src || a['data-src'] ? abs(a.src || a['data-src']) : null, alt: 'alt' in a ? a.alt : null, width: a.width, height: a.height, role: a.role, hidden: 'aria-hidden' in a, loading: (a.loading || '').toLowerCase() || null, srcset: !!(a.srcset || a['data-srcset']), inPicture: false }))
+  // <picture><source srcset> counts as responsive for the <img> inside it
+  for (const m of body.matchAll(/<picture\b[\s\S]*?<\/picture\s*>/gi)) {
+    if (!/<source\b[^>]*srcset/i.test(m[0])) continue
+    const inner = tags(m[0], 'img')[0]
+    const hit = inner && images.find((i) => i.src === (inner.src || inner['data-src'] || '') && !i.srcset && !i.inPicture)
+    if (hit) hit.inPicture = true
+  }
   const mixed = /^https:/.test(pageUrl)
     ? [...clean.matchAll(/<(?:img|script|link|iframe|source|video|audio)\b[^>]*\s(?:src|href)\s*=\s*["']?(http:\/\/[^"'\s>]+)/gi)].map((m) => m[1])
     : []
@@ -253,6 +263,7 @@ function extract(html, pageUrl) {
 function parseRobots(txt) {
   const groups = []
   const sitemaps = []
+  const signals = []
   let cur = null
   let lastWasAgent = false
   for (const raw of txt.split(/\r?\n/)) {
@@ -270,11 +281,14 @@ function parseRobots(txt) {
       lastWasAgent = false
     } else if (key === 'sitemap') {
       sitemaps.push(val)
+    } else if (key === 'content-signal') {
+      signals.push({ agents: cur ? [...cur.agents] : ['*'], value: val })
+      lastWasAgent = false
     } else {
       lastWasAgent = false
     }
   }
-  return { groups, sitemaps }
+  return { groups, sitemaps, signals }
 }
 
 function ruleMatches(pattern, path) {
@@ -400,7 +414,7 @@ async function main() {
   // robots.txt
   const robotsRes = await get(`${origin}/robots.txt`, { accept: 'text/plain,*/*;q=0.5' })
   let robots = { groups: [], sitemaps: [] }
-  const robotsInfo = { status: robotsRes.status, finalUrl: robotsRes.finalUrl }
+  const robotsInfo = { status: robotsRes.status, finalUrl: robotsRes.finalUrl, contentSignals: [] }
   if (robotsRes.status >= 500 || robotsRes.status === 0) {
     add('P1', 'robots.unreachable', `robots.txt answers ${robotsRes.status || robotsRes.error}; Google treats a 5xx robots.txt as "disallow everything" until it recovers.`, robotsRes.url)
   } else if (robotsRes.status === 200 && /<html/i.test(robotsRes.body.slice(0, 500))) {
@@ -408,6 +422,7 @@ async function main() {
   } else if (robotsRes.status === 200) {
     robots = parseRobots(robotsRes.body)
     robotsInfo.body = robotsRes.body.slice(0, 4000)
+    robotsInfo.contentSignals = robots.signals
     if (!robots.sitemaps.length) add('P3', 'robots.no-sitemap', 'robots.txt has no Sitemap: line.', robotsRes.url)
   } else {
     add('P3', 'robots.missing', `No robots.txt (${robotsRes.status}). Crawlers treat that as "allow all"; add one with a Sitemap: line.`, robotsRes.url)
@@ -531,6 +546,45 @@ async function main() {
   // per-page checks
   const titles = new Map()
   const imageCache = new Map()
+  let imagesFetched = 0
+  const imageStats = { measured: 0, otherHost: 0, skipped: 0 }
+  // Weight, format and responsiveness of the page's own images, plus the likely
+  // LCP image being lazy-loaded. Only same-site images are downloaded.
+  async function checkImages(images, pageUrl) {
+    const visible = images.filter((i) => i.abs && !i.hidden && !/^data:/i.test(i.src))
+    const first = visible[0]
+    if (first && first.loading === 'lazy' && !(Number(first.width) && Number(first.width) < 100))
+      add('P2', 'img.lcp-lazy', `The first image on the page (${first.src.slice(0, 80)}) has loading="lazy". If it's the largest thing above the fold (the LCP element), lazy-loading delays it; load it eagerly, with fetchpriority="high".`, pageUrl)
+    const heavy = []
+    const legacy = []
+    const fixedWide = []
+    for (const i of visible.slice(0, 12)) {
+      if (!sameSite(i.abs)) {
+        imageStats.otherHost++
+        continue
+      }
+      if (!imageCache.has(i.abs)) {
+        if (imagesFetched >= MAX_IMAGES) {
+          imageStats.skipped++
+          continue
+        }
+        imagesFetched++
+        imageCache.set(i.abs, await fetchImage(i.abs, { ua: UA, timeout: TIMEOUT }))
+      }
+      const img = imageCache.get(i.abs)
+      if (!img || img.status !== 200) continue
+      imageStats.measured++
+      const kb = Math.round(img.bytes / 1024)
+      const svg = /svg/i.test(img.type)
+      if (!svg && img.bytes > 200 * 1024) heavy.push({ src: i.src, kb })
+      if (/jpe?g|png|gif|bmp/i.test(img.type) && img.bytes > 100 * 1024) legacy.push({ src: i.src, kb, type: img.type.split(';')[0] })
+      if (!svg && img.size?.width >= 1000 && !i.srcset && !i.inPicture) fixedWide.push({ src: i.src, w: img.size.width })
+    }
+    const ex = (xs, f) => xs.slice(0, 3).map(f).join(', ') + (xs.length > 3 ? ' …' : '')
+    if (heavy.length) add(heavy.some((h) => h.kb > 1024) ? 'P2' : 'P3', 'img.heavy', `${heavy.length} image(s) over 200 KB: ${ex(heavy.sort((a, b) => b.kb - a.kb), (h) => `${h.src.slice(0, 60)} (${h.kb} KB)`)}. Compress or resize them.`, pageUrl)
+    if (legacy.length) add('P3', 'img.format', `${legacy.length} JPEG/PNG/GIF image(s) over 100 KB: ${ex(legacy, (h) => `${h.src.slice(0, 60)} (${h.type}, ${h.kb} KB)`)}. WebP or AVIF is usually far smaller at the same quality.`, pageUrl)
+    if (fixedWide.length) add('P3', 'img.srcset', `${fixedWide.length} image(s) at least 1000 px wide with no srcset or <picture>: ${ex(fixedWide, (h) => `${h.src.slice(0, 60)} (${h.w} px)`)}. Phones download the full size.`, pageUrl)
+  }
   const descs = new Map()
   const byUrl = new Map(results.map((p) => [p.finalUrl, p]))
   for (const p of results) {
@@ -620,6 +674,7 @@ async function main() {
     if (noAlt.length) add('P2', 'img.alt', `${noAlt.length} image(s) without an alt attribute (e.g. ${noAlt[0].src.slice(0, 80)}).`, p.url)
     const noDim = view.images.filter((i) => !i.width || !i.height)
     if (noDim.length) add('P3', 'img.dimensions', `${noDim.length} image(s) without width and height (layout shift).`, p.url)
+    await checkImages(view.images, p.url)
 
     const ld = [...d.jsonld, ...(r?.jsonld || [])]
     for (const j of ld.filter((j) => !j.ok)) add('P1', 'jsonld.invalid', `JSON-LD block does not parse: ${j.error}.`, p.url)
@@ -717,6 +772,11 @@ async function main() {
   const llms = await get(`${origin}/llms.txt`, { accept: 'text/plain,text/markdown,*/*;q=0.5' })
   const llmsInfo = { status: llms.status, present: llms.status === 200 && !/<html/i.test(llms.body.slice(0, 300)) }
 
+  // agents: is there a Markdown version for agents, and does the server treat
+  // AI fetchers like everyone else? Reported; only a block robots.txt doesn't
+  // ask for is graded.
+  const agents = await checkAgents(home, matrix)
+
   // redirects after a migration: every old URL given, one at a time
   let redirects = null
   if (redirectList) {
@@ -797,9 +857,11 @@ async function main() {
     crawlers: matrix.map(({ agent, kind, allowed, rule }) => ({ agent, kind, allowed, rule })),
     sitemaps: { files: sm.files, errors: sm.errors, urlCount: sm.urls.length },
     llmsTxt: llmsInfo,
+    agents,
     icons: iconInfo,
     pages: pagesOut,
     linksChecked: checkedLinks,
+    images: imageStats,
     redirects,
     linksUnreachable: unreachable,
     crawl: graph,
@@ -812,6 +874,34 @@ async function main() {
   if (opt('md')) writeFileSync(String(opt('md')), md)
   console.log(md)
   process.exit(counts.P1 ? 1 : 0)
+}
+
+// AI fetchers' user agents, as the operators document them (short forms are
+// enough for user-agent matching).
+const AGENT_UAS = [
+  ['OAI-SearchBot', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot'],
+  ['ChatGPT-User', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot'],
+  ['Claude-User', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Claude-User/1.0; +Claude-User@anthropic.com'],
+  ['PerplexityBot', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot'],
+]
+const CHALLENGE = /cf-chl|challenge-platform|just a moment\.\.\.|attention required|vercel security checkpoint|captcha/i
+
+async function checkAgents(home, matrix) {
+  const out = { markdown: null, markdownLink: null, probes: [] }
+  const md = await get(home.finalUrl, { accept: 'text/markdown, text/html;q=0.5' })
+  if (md.status === 200 && /text\/markdown/i.test(md.headers['content-type'] || '')) out.markdown = 'served for Accept: text/markdown'
+  const link = tags((home.body.match(/<head\b[\s\S]*?<\/head\s*>/i) || [''])[0], 'link').find((a) => /alternate/i.test(a.rel || '') && /text\/markdown/i.test(a.type || ''))
+  if (link) out.markdownLink = link.href || ''
+  if (home.status !== 200) return out
+  for (const [agent, ua] of AGENT_UAS) {
+    const r = await get(home.finalUrl, { ua })
+    const challenged = r.status === 200 && CHALLENGE.test(r.body.slice(0, 5000))
+    const blocked = (r.status >= 400 && r.status !== 404) || r.status === 0 || challenged
+    out.probes.push({ agent, status: r.status, challenged })
+    const allowed = matrix.find((c) => c.agent === agent)?.allowed !== false
+    if (blocked && allowed) add('P3', 'agents.blocked', `robots.txt allows ${agent}, but a request with its user agent got ${challenged ? 'a bot challenge page' : r.status || r.error}. A firewall or bot protection may be blocking it; real crawlers come from verified IP ranges, so confirm in the host's bot settings.`, home.finalUrl)
+  }
+  return out
 }
 
 // Breadth-first walk over raw-HTML <a href> links, as a crawler that doesn't run
@@ -995,6 +1085,10 @@ function report(r) {
   for (const c of r.crawlers) L.push(`| ${c.agent} | ${c.kind} | ${c.allowed ? 'yes' : '**no**'} | ${c.rule || '(no matching rule)'} |`)
   if (r.icons) L.push('', `Icons: favicon ${r.icons.favicons.map((f) => `${f.url} (${f.status}${f.size ? `, ${f.size}` : ''})`).join(', ') || 'none'} · apple-touch-icon ${r.icons.appleTouchIcon ? 'yes' : 'no'} · manifest ${r.icons.manifest ? (r.icons.manifest.valid ? 'yes' : 'broken') : 'no'} · theme-color ${r.icons.themeColor || 'none'}`)
   L.push('', `robots.txt: ${r.robots.status} · Sitemap lines: ${r.robots.sitemaps.join(', ') || 'none'} · llms.txt: ${r.llmsTxt.present ? 'present' : 'absent'} (optional; not graded)`)
+  if (r.agents) {
+    const sig = r.robots.contentSignals || []
+    L.push('', `Agents: Content-Signal ${sig.length ? sig.map((s) => `\`${s.value}\` (${s.agents.join(', ')})`).join('; ') : 'none'} · Markdown version ${r.agents.markdown || (r.agents.markdownLink ? `linked (${r.agents.markdownLink})` : 'none')}${r.agents.probes.length ? ` · home page as ${r.agents.probes.map((p) => `${p.agent} ${p.challenged ? 'challenge' : p.status}`).join(', ')}` : ''} (not graded)`)
+  }
   L.push('', '## Pages', '', '| URL | Status | Title | Words raw / rendered | Canonical | Schema |', '| --- | --- | --- | --- | --- | --- |')
   for (const p of r.pages) {
     const t = (p.title || p.renderedTitle || '').replace(/\|/g, '\\|').slice(0, 60)
