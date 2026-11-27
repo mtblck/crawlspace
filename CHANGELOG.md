@@ -16,7 +16,7 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   can say, evidence to gather, internal links and schema), after checking no existing page already targets
   the query. `/crawlspace:page refresh` builds a queue of pages to update, from lost Search Console clicks,
   out-of-date content, real last-edit dates and striking-distance queries. The checker's JSON now includes
-  each page's sitemap `lastmod`. (#PR)
+  each page's sitemap `lastmod`. (#20)
 - `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
   and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
   canonical away, or lost its share image, structured data or most of its words; a search crawler newly
