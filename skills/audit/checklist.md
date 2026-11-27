@@ -149,9 +149,35 @@ states plainly who it is and what it does on the home and about pages.
 - **Content / blog:** `Article` or `BlogPosting` with author and dates, author
   pages, categories that aren't thin, internal links between related posts,
   `lastmod` from real edits.
-- **Local business / shop:** consistent name, address and phone everywhere,
-  `LocalBusiness` or `Product` schema, Google Business Profile, unique product and
-  category copy.
+- **Shop / ecommerce:**
+  - `Product` markup on every product page with `name`, `image` and an `offers`
+    block carrying `price`, `priceCurrency` and `availability` (the checker's
+    `schema.product-*` findings). It must match the visible price and stock.
+  - Variants: one indexable URL per product, with variants as a `ProductGroup` or
+    parameters canonicalised to the main product, unless a variant is searched for
+    on its own (a colour, a size people name).
+  - Filtered and sorted listing URLs (`?color=`, `?sort=`, faceted paths) aren't in
+    the sitemap and are canonicalised or noindexed, so they don't multiply into
+    thousands of thin duplicates. Pagination pages are indexable and self-canonical.
+  - Out of stock for now: keep the page at 200 with `OutOfStock`. Discontinued
+    for good: 301 to the closest replacement or category, or 410 when there is none.
+  - Category pages have their own intro copy and link to their products in the
+    served HTML. Product copy is the shop's own, not the manufacturer's text that
+    every reseller uses.
+  - Google Merchant Center (free listings) is in "Set up once" for any shop that
+    sells physical goods.
+- **Local business:**
+  - The same name, address and phone (NAP) everywhere: site footer, contact page,
+    `LocalBusiness` markup, Google Business Profile and directories. The checker's
+    `local.phone-mismatch` flags several numbers.
+  - `LocalBusiness` (or the most specific subtype: `Bakery`, `Dentist` …) with
+    `name` and `address`, plus `telephone`, `url` and opening hours
+    (`schema.local-*`).
+  - One page per real location, with its own address, hours, directions and
+    photos, linked from a locations page. No doorway pages for towns the business
+    has no presence in.
+  - Google Business Profile claimed, verified, in the right primary category, with
+    the site's URL and the same hours. Reviews answered.
 
 ## 8. Icons
 

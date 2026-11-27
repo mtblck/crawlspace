@@ -28,6 +28,13 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   the query. `/crawlspace:page refresh` builds a queue of pages to update, from lost Search Console clicks,
   out-of-date content, real last-edit dates and striking-distance queries. The checker's JSON now includes
   each page's sitemap `lastmod`. (#20)
+- Checks for shops and local businesses. Product markup without a name, without offers, reviews or ratings
+  (`schema.product-incomplete`), with an offer missing its price or currency (`schema.product-offer`) or its
+  availability (`schema.product-availability`); LocalBusiness markup (and subtypes such as Bakery or Dentist)
+  missing its name or address (`schema.local-incomplete`) or telephone, url and opening hours
+  (`schema.local-recommended`); and several different phone numbers across the site (`local.phone-mismatch`).
+  The audit checklist has full shop and local sections: variants, faceted URLs, out-of-stock and discontinued
+  products, NAP consistency, location pages and Google Business Profile. (#21)
 - `seo-check.mjs --baseline earlier.json` compares a run with an earlier one: it re-checks every baseline page
   and grades regressions as `drift.*` findings (a page that stopped answering 200, became noindex, moved its
   canonical away, or lost its share image, structured data or most of its words; a search crawler newly
