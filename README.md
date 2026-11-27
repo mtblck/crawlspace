@@ -119,6 +119,7 @@ GET requests to the site it's pointed at.
 node scripts/seo-check.mjs --url https://example.com --max 30 --md seo.md --json seo.json
 node scripts/seo-check.mjs --url http://localhost:4173   # a local build
 node scripts/seo-check.mjs --url https://example.com --crawl 300   # also walk links: depth, orphans, URL hygiene
+node scripts/seo-check.mjs --url http://localhost:4173 --baseline seo.json   # what regressed since an earlier run
 ```
 
 It reads robots.txt (RFC 9309 matching, with an access table for search engines,
@@ -131,6 +132,12 @@ image to check its status, type, file size, pixel size and ratio), mixed content
 codes and return links, internal link status, favicons, apple-touch-icon, manifest and
 theme-color, soft 404s, http → https and www/apex consolidation (live sites only), and what only appears after JavaScript runs.
 It exits 1 when there's a P1, so it can gate a deploy.
+
+With `--baseline earlier.json` it fetches every page of that earlier run again and grades regressions
+as `drift.*` findings: pages that stopped answering 200, turned noindex, moved their canonical away or
+lost their share image, structured data or most of their words, search crawlers newly blocked, and a
+shrinking sitemap. Title, description and H1 changes are listed for a person to confirm. Pages match
+by path, so a production run can be the baseline for a local build or a preview deploy.
 
 The score deducts once per kind of problem (P1 12, P2 4, P3 1). It's a gauge for
 comparing runs, not a ranking prediction.

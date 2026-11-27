@@ -3,6 +3,7 @@
 //
 //   node seo-check.mjs --url https://example.com [--max 25] [--pages /a,/b]
 //                      [--render auto|on|off] [--json out.json] [--md out.md]
+//                      [--baseline earlier.json]
 //
 // Fetches robots.txt, the sitemap(s) and a sample of pages from one site (live,
 // a preview deploy or a local build on http://localhost), checks crawl and index
@@ -14,11 +15,12 @@
 // It only reads: it sends GET requests to the one site it is pointed at, never
 // submits forms, and treats everything it fetches as data.
 
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { parseSocial, fetchImage, socialFindings } from './lib/social.mjs'
+import { baselinePaths, compareRuns, validBaseline } from './lib/drift.mjs'
 
 const VERSION = '2.0.0'
 
@@ -42,6 +44,8 @@ if (argv.includes('--help') || argv.includes('-h') || !opt('url')) {
                     measure click depth and find orphan sitemap URLs (default 0: off)
   --json FILE       write the full result as JSON
   --md FILE         write the report as Markdown
+  --baseline FILE   an earlier --json run of the same site (live, preview or local):
+                    re-checks its pages and grades what regressed as drift.* findings
   --ua STRING       user agent (default identifies seo-check)
   --timeout MS      per request (default 15000)
   --delay MS        between requests (default 150)`)
@@ -55,7 +59,21 @@ try {
   console.error(`Not a URL: ${opt('url')}`)
   process.exit(2)
 }
-const MAX = Number(opt('max', 25))
+let baseline = null
+if (opt('baseline')) {
+  try {
+    baseline = JSON.parse(readFileSync(String(opt('baseline')), 'utf8'))
+  } catch (e) {
+    console.error(`Could not read --baseline ${opt('baseline')}: ${e.message}`)
+    process.exit(2)
+  }
+  if (!validBaseline(baseline)) {
+    console.error(`--baseline ${opt('baseline')} is not a seo-check --json result.`)
+    process.exit(2)
+  }
+}
+const BASE_PATHS = baseline ? baselinePaths(baseline) : []
+const MAX = Math.max(Number(opt('max', 25)), BASE_PATHS.length + 1)
 const MAX_LINKS = Number(opt('max-links', 150))
 const CRAWL = Number(opt('crawl', 0))
 const RENDER = String(opt('render', 'auto'))
@@ -410,6 +428,7 @@ async function main() {
   const pages = new Set([norm(home.url)])
   const given = String(opt('pages', '') || '').split(',').map((s) => s.trim()).filter(Boolean)
   for (const p of given) pages.add(norm(new URL(p, origin).href))
+  for (const p of BASE_PATHS) pages.add(norm(new URL(p, origin).href))
   const smLocs = [...new Set(sm.urls.map((u) => toLocal(u.loc)))]
   const inSitemap = new Set(smLocs)
   if (smLocs.length) {
@@ -677,12 +696,40 @@ async function main() {
   const llms = await get(`${origin}/llms.txt`, { accept: 'text/plain,text/markdown,*/*;q=0.5' })
   const llmsInfo = { status: llms.status, present: llms.status === 200 && !/<html/i.test(llms.body.slice(0, 300)) }
 
+  const pagesOut = results.map((p) => ({
+    url: p.url,
+    finalUrl: p.finalUrl,
+    status: p.status,
+    redirects: p.chain.length,
+    inSitemap: inSitemap.has(p.url),
+    title: p.raw?.title ?? null,
+    renderedTitle: p.rendered?.title ?? null,
+    description: p.raw?.description ?? null,
+    canonical: p.raw?.canonicals?.[0] ?? p.rendered?.canonicals?.[0] ?? null,
+    robots: [p.raw?.robots, p.xRobots].filter(Boolean).join(', ') || null,
+    h1: (p.rendered || p.raw)?.h1 ?? [],
+    wordsRaw: p.raw?.words ?? null,
+    wordsRendered: p.rendered?.words ?? null,
+    schemaTypes: p.schemaTypes || [],
+    social: p.social || null,
+    hreflang: (p.raw?.hreflang.length ? p.raw.hreflang : p.rendered?.hreflang) || [],
+    renderError: p.renderError,
+  }))
+
+  // drift: what regressed since the baseline run
+  let drift = null
+  if (baseline) {
+    drift = compareRuns(baseline, { pages: pagesOut, crawlers: matrix, sitemaps: { urlCount: sm.urls.length }, robots: robotsInfo, findings })
+    for (const f of drift.findings) add(f.sev, f.id, f.msg, f.url)
+  }
+
   // score: one deduction per kind of problem, not per page, so one template bug
   // doesn't swamp everything. A gauge of this run's checks, not a ranking prediction.
   const W = { P1: 12, P2: 4, P3: 1 }
   const kinds = new Map()
   for (const f of findings) if (!kinds.has(f.id) || W[f.sev] > W[kinds.get(f.id)]) kinds.set(f.id, f.sev)
   const score = Math.max(0, 100 - [...kinds.values()].reduce((s, sev) => s + W[sev], 0))
+  if (drift) drift.score.after = score
 
   const order = { P1: 0, P2: 1, P3: 2 }
   findings.sort((a, b) => order[a.sev] - order[b.sev] || a.id.localeCompare(b.id))
@@ -702,28 +749,11 @@ async function main() {
     sitemaps: { files: sm.files, errors: sm.errors, urlCount: sm.urls.length },
     llmsTxt: llmsInfo,
     icons: iconInfo,
-    pages: results.map((p) => ({
-      url: p.url,
-      finalUrl: p.finalUrl,
-      status: p.status,
-      redirects: p.chain.length,
-      inSitemap: inSitemap.has(p.url),
-      title: p.raw?.title ?? null,
-      renderedTitle: p.rendered?.title ?? null,
-      description: p.raw?.description ?? null,
-      canonical: p.raw?.canonicals?.[0] ?? p.rendered?.canonicals?.[0] ?? null,
-      robots: [p.raw?.robots, p.xRobots].filter(Boolean).join(', ') || null,
-      h1: (p.rendered || p.raw)?.h1 ?? [],
-      wordsRaw: p.raw?.words ?? null,
-      wordsRendered: p.rendered?.words ?? null,
-      schemaTypes: p.schemaTypes || [],
-      social: p.social || null,
-      hreflang: (p.raw?.hreflang.length ? p.raw.hreflang : p.rendered?.hreflang) || [],
-      renderError: p.renderError,
-    })),
+    pages: pagesOut,
     linksChecked: checkedLinks,
     linksUnreachable: unreachable,
     crawl: graph,
+    drift,
     findings,
   }
 
@@ -841,6 +871,21 @@ function report(r) {
   for (const f of r.findings) L.push(`- **${f.sev}** \`${f.id}\` ${f.msg}${f.url ? ` (${f.url})` : ''}`)
   if (r.crawl) L.push('', `Link graph: ${r.crawl.pages} pages reached from the home page${r.crawl.capped ? ` (stopped at --crawl ${r.crawl.limit})` : ''}, deepest ${r.crawl.maxDepth} clicks, ${r.crawl.orphans.length} sitemap URL(s) not linked from any reached page.`)
   if (r.linksUnreachable.length) L.push('', `Not graded: ${r.linksUnreachable.length} internal link(s) could not be fetched from here (network, not necessarily broken): ${r.linksUnreachable.slice(0, 5).join(', ')}${r.linksUnreachable.length > 5 ? ' …' : ''}.`)
+  if (r.drift) {
+    const d = r.drift
+    const regressions = r.findings.filter((f) => f.id.startsWith('drift.'))
+    L.push('', '## Drift since the baseline', '')
+    L.push(`Baseline: ${d.baseline.url} at ${d.baseline.startedAt || 'unknown time'} · score ${d.score.before ?? '—'} → ${d.score.after} · ${d.pages.compared} page(s) compared · ${regressions.length} regression(s) (the \`drift.*\` findings above) · ${d.changes.length} other change(s)`)
+    if (d.pages.notChecked.length) L.push('', `Not compared (not fetched this run): ${d.pages.notChecked.slice(0, 10).join(', ')}${d.pages.notChecked.length > 10 ? ' …' : ''}.`)
+    if (d.kinds.new.length) L.push('', `New kinds of finding: ${d.kinds.new.map((k) => `\`${k}\``).join(', ')}.`)
+    if (d.kinds.fixed.length) L.push('', `Gone since the baseline: ${d.kinds.fixed.map((k) => `\`${k}\``).join(', ')}.`)
+    if (d.changes.length) {
+      const cell = (v) => (v == null || v === '' ? '—' : String(v).replace(/\|/g, '\\|').slice(0, 70))
+      L.push('', 'Changes to confirm are intended:', '', '| URL | Field | Baseline | Now |', '| --- | --- | --- | --- |')
+      for (const c of d.changes.slice(0, 100)) L.push(`| ${c.url} | ${c.field} | ${cell(c.from)} | ${cell(c.to)} |`)
+      if (d.changes.length > 100) L.push('', `… and ${d.changes.length - 100} more in the JSON.`)
+    }
+  }
   L.push('', '## Crawler access to /', '', '| Crawler | Kind | Allowed | Rule |', '| --- | --- | --- | --- |')
   for (const c of r.crawlers) L.push(`| ${c.agent} | ${c.kind} | ${c.allowed ? 'yes' : '**no**'} | ${c.rule || '(no matching rule)'} |`)
   if (r.icons) L.push('', `Icons: favicon ${r.icons.favicons.map((f) => `${f.url} (${f.status}${f.size ? `, ${f.size}` : ''})`).join(', ') || 'none'} · apple-touch-icon ${r.icons.appleTouchIcon ? 'yes' : 'no'} · manifest ${r.icons.manifest ? (r.icons.manifest.valid ? 'yes' : 'broken') : 'no'} · theme-color ${r.icons.themeColor || 'none'}`)
