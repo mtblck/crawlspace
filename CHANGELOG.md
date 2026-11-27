@@ -22,6 +22,12 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
   TTFB) for each page and the whole origin from the PageSpeed Insights API, rated against Google's thresholds.
   The audit uses field data first and labels Lighthouse numbers as lab. It works without a key; set
   `PAGESPEED_API_KEY` for more quota. (#19)
+- Programmatic and comparison pages: the checker groups sitemap URLs by pattern (`/tools/*`, `/integrations/*`,
+  `x-vs-y`), samples three pages of each large group and compares their text with the site's header and footer
+  set aside. `programmatic.near-duplicate` (60% or more alike), `programmatic.thin` (about 200 words of their own
+  or fewer) and `programmatic.bloat` (weak template pages are half the sitemap or more), with a "Template page
+  groups" line in the report and `templates` in the JSON. The audit checklist adds guidance for programmatic
+  and comparison (vs and alternatives) pages. (#PR)
 - `/crawlspace:page brief <query>` writes a content brief for a page that doesn't exist yet (intent and format
   from what ranks, title, description, slug, an outline with the questions to answer and what only this site
   can say, evidence to gather, internal links and schema), after checking no existing page already targets
