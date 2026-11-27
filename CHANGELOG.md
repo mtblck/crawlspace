@@ -11,6 +11,9 @@ version with the date and bumps `plugin.json` and `VERSION` in `scripts/seo-chec
 
 ### Added
 
+- Agent readiness in `/crawlspace:ai-search` and the checker: Content-Signal lines in robots.txt, whether the
+  site serves or links a Markdown version for agents, and whether the server blocks or challenges AI fetchers
+  (OAI-SearchBot, ChatGPT-User, Claude-User, PerplexityBot) that robots.txt allows (`agents.blocked`, P3). (#17)
 - The checker measures the site's own images: `img.heavy` (over 200 KB, P2 over 1 MB), `img.format` (JPEG, PNG
   or GIF over 100 KB where WebP or AVIF would do), `img.srcset` (1000 px or wider with no `srcset` or
   `<picture>`) and `img.lcp-lazy` (the first image on the page is `loading="lazy"`, P2). Up to 150 same-site
