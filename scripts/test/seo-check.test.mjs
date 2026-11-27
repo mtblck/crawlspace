@@ -417,3 +417,52 @@ test('shops and local businesses: Product offers, LocalBusiness fields, one phon
   assert.match(r.findings.find((f) => f.id === 'schema.product-offer').msg, /missing priceCurrency/)
   assert.match(r.findings.find((f) => f.id === 'local.phone-mismatch').msg, /^2 different phone numbers/, '+1 (555) 010-0000 and tel:+15550100000 are the same number')
 })
+
+test('programmatic pages: template groups, near-duplicates, thin pages and sitemap bloat', async () => {
+  const nav = '<nav><a href="/">Home</a> <a href="/tools/">All the conversion tools we make</a> <a href="/blog/">Read the latest posts from the team</a></nav>'
+  const foot = '<footer>Copyright Example Labs, all rights reserved, made with care in a small town by the sea</footer>'
+  const doc = (title, main) => `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"><title>${title}</title></head><body>${nav}<h1>${title}</h1><main>${main}</main>${foot}</body></html>`
+  let seed = 7
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const vocab = 'river stone garden lamp copper winter orbit signal paper harbor violet engine meadow candle thunder ladder silver forest mirror canyon'.split(' ')
+  const prose = (n) => Array.from({ length: n }, () => vocab[Math.floor(rnd() * vocab.length)] + Math.floor(rnd() * 50)).join(' ')
+  const tools = 'abcdefghij'.split('').map((c) => `/tools/${c}-to-csv`)
+  const posts = Array.from({ length: 8 }, (_, i) => `/blog/post-${i}`)
+  const routes = { '/': doc('Example Labs home page', '<p>Tools and writing.</p>') }
+  for (const t of tools) routes[t] = doc(`Convert ${t.slice(7, 8)} to CSV online`, `<p>Convert your ${t.slice(7, 8)} file to CSV in seconds. Upload the file, press convert, and download the CSV. Free, private and fast, with no sign-up needed for files under ten megabytes.</p>`)
+  for (const p of posts) routes[p] = doc(`Post ${p.slice(-1)} about something`, `<p>${prose(320)}</p>`)
+  const server = createServer((req, res) => {
+    const path = new URL(req.url, 'http://x').pathname
+    const o = `http://localhost:${server.address().port}`
+    if (path === '/robots.txt') return res.writeHead(200, { 'content-type': 'text/plain' }).end(`User-agent: *\nAllow: /\nSitemap: ${o}/sitemap.xml\n`)
+    if (path === '/sitemap.xml') return res.writeHead(200, { 'content-type': 'application/xml' }).end(`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['/', ...tools, ...posts].map((u) => `<url><loc>${o}${u}</loc></url>`).join('')}</urlset>`)
+    if (!routes[path]) return res.writeHead(404).end()
+    res.writeHead(200, { 'content-type': 'text/html' }).end(routes[path])
+  })
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  const { port } = server.address()
+  const out = join(mkdtempSync(join(tmpdir(), 'seo-tpl-')), 'r.json')
+  await new Promise((resolve) => execFile('node', [SCRIPT, '--url', `http://localhost:${port}/`, '--render', 'off', '--delay', '0', '--max', '25', '--max-links', '0', '--max-images', '0', '--json', out], () => resolve()))
+  server.close()
+  const r = JSON.parse(readFileSync(out, 'utf8'))
+  const tool = r.templates.find((t) => t.pattern === '/tools/*')
+  const blog = r.templates.find((t) => t.pattern === '/blog/*')
+  assert.equal(tool.count, 10)
+  assert.ok(tool.similarity >= 0.6, `tools are alike: ${tool.similarity}`)
+  assert.ok(tool.ownWords < 200, `tools are thin: ${tool.ownWords}`)
+  assert.ok(blog.similarity < 0.2 && blog.ownWords > 200, `posts are distinct: ${blog.similarity}, ${blog.ownWords}`)
+  const ids = r.findings.filter((f) => f.id.startsWith('programmatic.')).map((f) => f.id).sort()
+  assert.deepEqual(ids, ['programmatic.bloat', 'programmatic.near-duplicate', 'programmatic.thin'], 'only the tools group is flagged')
+})
+
+test('templates.mjs groups URL patterns and spots comparison pages', async () => {
+  const { patternOf, templateGroups } = await import('../lib/templates.mjs')
+  assert.equal(patternOf('/tools/json-to-csv'), '/tools/*')
+  assert.equal(patternOf('/notion-vs-obsidian'), '/*-vs-*')
+  assert.equal(patternOf('/notion-alternatives'), '/*alternatives*')
+  assert.equal(patternOf('/about'), null)
+  const urls = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((x) => `https://example.com/compare/${x}-vs-z`)
+  const [g] = templateGroups([...urls, 'https://example.com/about'])
+  assert.deepEqual([g.pattern, g.urls.length, g.comparison], ['/compare/*', 8, true])
+  assert.equal(templateGroups(urls.slice(0, 7)).length, 0, 'fewer than 8 pages is not a template group')
+})

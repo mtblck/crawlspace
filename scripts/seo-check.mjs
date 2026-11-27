@@ -25,6 +25,7 @@ import { parseSocial, fetchImage, socialFindings } from './lib/social.mjs'
 import { nodes as ldNodes, commerceFindings, phones } from './lib/commerce.mjs'
 import { parseRedirectList, gradeRedirect } from './lib/redirects.mjs'
 import { baselinePaths, compareRuns, validBaseline } from './lib/drift.mjs'
+import { templateGroups, spread, chrome, measureGroup, templateFindings } from './lib/templates.mjs'
 
 const VERSION = '2.0.0'
 
@@ -251,6 +252,7 @@ function extract(html, pageUrl) {
     headings,
     h1: headings.filter((h) => h.level === 1).map((h) => h.text),
     words: text ? text.split(' ').length : 0,
+    text: text.slice(0, 100000),
     links,
     images,
     jsonld,
@@ -468,6 +470,10 @@ async function main() {
   const smLocs = [...new Set(sm.urls.map((u) => toLocal(u.loc)))]
   const inSitemap = new Set(smLocs)
   const lastmods = new Map(sm.urls.filter((u) => u.lastmod).map((u) => [toLocal(u.loc), u.lastmod]))
+  // template page groups (/tools/*, /vs/*): sample a few of each of the largest
+  // so their pages can be compared with one another
+  const tplGroups = templateGroups(smLocs)
+  if (MAX >= 10) for (const g of tplGroups.slice(0, 3)) for (const u of spread(g.urls, 3)) if (pages.size < MAX) pages.add(u)
   if (smLocs.length) {
     const step = Math.max(1, smLocs.length / Math.max(1, MAX - pages.size))
     for (let i = 0; i < smLocs.length && pages.size < MAX; i += step) pages.add(smLocs[Math.floor(i)])
@@ -710,6 +716,16 @@ async function main() {
       }
     }
   }
+  // programmatic pages: how alike the sampled pages of each template group are
+  const viewText = (p) => (p.rendered || p.raw)?.text || ''
+  const okPages = results.filter((p) => p.status === 200 && p.raw)
+  const siteChrome = okPages.length ? chrome(viewText(okPages[0]), okPages.slice(1).map(viewText)) : new Set()
+  const templates = tplGroups.map((g) => {
+    const inGroup = new Set(g.urls)
+    const m = measureGroup(okPages.filter((p) => inGroup.has(p.url)).map((p) => ({ url: p.url, text: viewText(p) })), siteChrome)
+    return { pattern: g.pattern, urls: g.urls, count: g.urls.length, share: +(g.urls.length / smLocs.length).toFixed(2), comparison: g.comparison, ...m }
+  })
+  for (const f of templateFindings(templates)) add(f.sev, f.id, f.msg, f.url)
   if (sitePhones.size > 1) add('P3', 'local.phone-mismatch', `${sitePhones.size} different phone numbers across the site (${[...sitePhones].slice(0, 4).map(([n, us]) => `${n} on ${us.length} page(s)`).join(', ')}). Fine for separate departments or locations; otherwise use one number everywhere, the same as the Google Business Profile.`, [...sitePhones.values()][0][0])
   for (const [t, us] of titles) if (us.length > 1) add('P2', 'title.duplicate', `${us.length} pages share the title "${t}": ${us.slice(0, 4).join(', ')}${us.length > 4 ? ' …' : ''}.`, us[0])
   for (const [t, us] of descs) if (us.length > 1) add('P2', 'description.duplicate', `${us.length} pages share one meta description: ${us.slice(0, 4).join(', ')}${us.length > 4 ? ' …' : ''}.`, us[0])
@@ -868,6 +884,7 @@ async function main() {
     pages: pagesOut,
     linksChecked: checkedLinks,
     images: imageStats,
+    templates: templates.map(({ urls, ...t }) => t),
     redirects,
     linksUnreachable: unreachable,
     crawl: graph,
@@ -1087,6 +1104,7 @@ function report(r) {
       if (d.changes.length > 100) L.push('', `… and ${d.changes.length - 100} more in the JSON.`)
     }
   }
+  if (r.templates?.length) L.push('', `Template page groups: ${r.templates.map((t) => `${t.pattern} ${t.count} URLs (${Math.round(t.share * 100)}% of sitemap${t.comparison ? ', comparison pages' : ''})${t.sampled >= 3 ? `, ${t.sampled} sampled ${Math.round(t.similarity * 100)}% alike with ~${t.ownWords} words of their own` : `, ${t.sampled} sampled (3 needed to compare)`}`).join(' · ')}`)
   L.push('', '## Crawler access to /', '', '| Crawler | Kind | Allowed | Rule |', '| --- | --- | --- | --- |')
   for (const c of r.crawlers) L.push(`| ${c.agent} | ${c.kind} | ${c.allowed ? 'yes' : '**no**'} | ${c.rule || '(no matching rule)'} |`)
   if (r.icons) L.push('', `Icons: favicon ${r.icons.favicons.map((f) => `${f.url} (${f.status}${f.size ? `, ${f.size}` : ''})`).join(', ') || 'none'} · apple-touch-icon ${r.icons.appleTouchIcon ? 'yes' : 'no'} · manifest ${r.icons.manifest ? (r.icons.manifest.valid ? 'yes' : 'broken') : 'no'} · theme-color ${r.icons.themeColor || 'none'}`)

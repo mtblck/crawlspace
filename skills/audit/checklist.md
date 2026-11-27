@@ -178,6 +178,31 @@ states plainly who it is and what it does on the home and about pages.
     has no presence in.
   - Google Business Profile claimed, verified, in the right primary category, with
     the site's URL and the same hours. Reviews answered.
+- **Programmatic pages** (one template filled per city, integration, tool, format
+  or keyword; the report's "Template page groups" line):
+  - Each page answers its query with data or copy that only it has: real
+    numbers, examples, screenshots or reviews for that entity, not the template
+    with the name swapped in. The checker compares a sample of each group
+    (`programmatic.near-duplicate` when pages are 60%+ alike once the header and
+    footer are set aside, `programmatic.thin` under about 200 words of their own).
+  - Generate a page only where real demand and real data exist; the sitemap lists
+    the pages worth indexing, not every combination (`programmatic.bloat` when
+    weak template pages are half the sitemap or more). Noindex or consolidate the
+    rest rather than letting Google decide.
+  - Template pages are linked from a hub (category or index page) and from each
+    other where related, not only from the sitemap; see `/crawlspace:links`.
+- **Comparison pages** (`x-vs-y`, `x-alternatives`, `/compare/`):
+  - Fair and specific: a table on the criteria buyers actually weigh (price,
+    limits, features, integrations, support), what each option is better at,
+    including where the competitor wins, and who should pick which.
+  - Facts that can be checked, with the date they were checked; competitor
+    pricing and features go stale, so give them a review date and keep `lastmod`
+    honest.
+  - One page per real pairing people search for, not every permutation; an
+    `alternatives` page that leads with the product's own answer and lists real
+    alternatives with reasons.
+  - Title and H1 name both products (or "<product> alternatives"), and the page
+    links to the product, pricing and the related comparisons.
 
 ## 8. Icons
 

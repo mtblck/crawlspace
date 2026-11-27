@@ -133,7 +133,8 @@ checks status codes, redirects, noindex in sitemaps, titles and descriptions
 (missing, length, duplicates), canonicals and their targets, `lang`, viewport,
 headings, images (alt text, size attributes, and for same-site images their weight, format, `srcset` and a
 lazy-loaded first image), JSON-LD parsing (with Product offer and LocalBusiness checks for shops and local
-businesses, and one phone number across the site), Open Graph and Twitter card tags (fetching each share
+businesses, and one phone number across the site), template page groups (sampled pages of each URL pattern
+compared for near-duplicate or thin text, and their share of the sitemap), Open Graph and Twitter card tags (fetching each share
 image to check its status, type, file size, pixel size and ratio), mixed content, hreflang
 codes and return links, internal link status, favicons, apple-touch-icon, manifest and
 theme-color, soft 404s, http → https and www/apex consolidation (live sites only), and what only appears after JavaScript runs.
