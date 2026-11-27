@@ -113,13 +113,14 @@ link looks on Slack".
 
 `scripts/seo-check.mjs` is the evidence collector the skills share. It needs Node 18 or newer and
 nothing else, and renders pages with Playwright when Playwright is already installed. It only sends
-GET requests to the site it's pointed at.
+GET requests to the site it's pointed at, plus any old URLs you list with `--redirects`.
 
 ```
 node scripts/seo-check.mjs --url https://example.com --max 30 --md seo.md --json seo.json
 node scripts/seo-check.mjs --url http://localhost:4173   # a local build
 node scripts/seo-check.mjs --url https://example.com --crawl 300   # also walk links: depth, orphans, URL hygiene
 node scripts/seo-check.mjs --url http://localhost:4173 --baseline seo.json   # what regressed since an earlier run
+node scripts/seo-check.mjs --url https://new.example.com --redirects old-urls.csv   # after a migration
 ```
 
 It reads robots.txt (RFC 9309 matching, with an access table for search engines,
@@ -138,6 +139,10 @@ as `drift.*` findings: pages that stopped answering 200, turned noindex, moved t
 lost their share image, structured data or most of their words, search crawlers newly blocked, and a
 shrinking sitemap. Title, description and H1 changes are listed for a person to confirm. Pages match
 by path, so a production run can be the baseline for a local build or a preview deploy.
+After a migration or a URL change, `--redirects FILE` checks every old URL: a text or CSV file of
+old URLs or paths (optionally `old,new` to say where each should land) or the old `sitemap.xml`. Each
+must 301 or 308 in one hop to a page that answers 200, is indexable and is its own canonical. It
+flags missing redirects, temporary ones, chains, loops, redirects to the home page and wrong targets.
 
 The score deducts once per kind of problem (P1 12, P2 4, P3 1). It's a gauge for
 comparing runs, not a ranking prediction.

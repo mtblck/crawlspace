@@ -81,6 +81,16 @@ sitemap that shrank. Other differences (titles, descriptions, H1s) are listed
 under "Changes to confirm are intended", not graded. Pages match by path, so a
 production baseline works against a local build.
 
+**After a migration or a URL change** (new domain, new routes, a CMS move), get
+the old URLs: the old sitemap (from git history or the Wayback Machine), a Search
+Console Pages export, or the old route list in the code. Put them in a file,
+with `old,new` per line when the new home of each is known, and add
+`--redirects old-urls.csv`. Each old URL must 301/308 in one hop to a live,
+indexable page that is its own canonical; the `redirect.*` findings say which
+don't. Against a local build, list old *paths*, since absolute URLs are fetched
+as given. Then check the redirect config in the code (`vercel.json`,
+`next.config`, `_redirects`, the server) for the cause.
+
 If `${CLAUDE_PLUGIN_ROOT}` isn't set, the script is `scripts/seo-check.mjs` in this
 plugin's folder (two levels above this skill). It needs Node 18+ and nothing else;
 it renders pages with Playwright when Playwright is installed (it is in Claude's

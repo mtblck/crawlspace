@@ -3,6 +3,7 @@
 //
 //   node seo-check.mjs --url https://example.com [--max 25] [--pages /a,/b]
 //                      [--render auto|on|off] [--json out.json] [--md out.md]
+//                      [--redirects old-urls.txt]
 //                      [--baseline earlier.json]
 //
 // Fetches robots.txt, the sitemap(s) and a sample of pages from one site (live,
@@ -12,14 +13,16 @@
 // Exit 0: no P1. Exit 1: at least one P1. Exit 2: usage error or the site
 // could not be fetched at all.
 //
-// It only reads: it sends GET requests to the one site it is pointed at, never
-// submits forms, and treats everything it fetches as data.
+// It only reads: it sends GET requests to the one site it is pointed at (and to
+// the old URLs given with --redirects), never submits forms, and treats
+// everything it fetches as data.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { parseSocial, fetchImage, socialFindings } from './lib/social.mjs'
+import { parseRedirectList, gradeRedirect } from './lib/redirects.mjs'
 import { baselinePaths, compareRuns, validBaseline } from './lib/drift.mjs'
 
 const VERSION = '2.0.0'
@@ -44,6 +47,10 @@ if (argv.includes('--help') || argv.includes('-h') || !opt('url')) {
                     measure click depth and find orphan sitemap URLs (default 0: off)
   --json FILE       write the full result as JSON
   --md FILE         write the report as Markdown
+  --redirects FILE  old URLs or paths after a migration, one per line, optionally
+                    followed by the new URL each should land on (CSV old,new
+                    works), or an old sitemap.xml: checks each 301s in one hop
+                    to a live, indexable page
   --baseline FILE   an earlier --json run of the same site (live, preview or local):
                     re-checks its pages and grades what regressed as drift.* findings
   --ua STRING       user agent (default identifies seo-check)
@@ -58,6 +65,19 @@ try {
 } catch {
   console.error(`Not a URL: ${opt('url')}`)
   process.exit(2)
+}
+let redirectList = null
+if (opt('redirects')) {
+  try {
+    redirectList = parseRedirectList(readFileSync(String(opt('redirects')), 'utf8'))
+  } catch (e) {
+    console.error(`Could not read --redirects ${opt('redirects')}: ${e.message}`)
+    process.exit(2)
+  }
+  if (!redirectList.length) {
+    console.error(`--redirects ${opt('redirects')} has no URLs or paths in it.`)
+    process.exit(2)
+  }
 }
 let baseline = null
 if (opt('baseline')) {
@@ -696,6 +716,33 @@ async function main() {
   const llms = await get(`${origin}/llms.txt`, { accept: 'text/plain,text/markdown,*/*;q=0.5' })
   const llmsInfo = { status: llms.status, present: llms.status === 200 && !/<html/i.test(llms.body.slice(0, 300)) }
 
+  // redirects after a migration: every old URL given, one at a time
+  let redirects = null
+  if (redirectList) {
+    redirects = { listed: redirectList.length, checked: 0, ok: 0, unreachable: [], problems: [] }
+    for (const e of redirectList.slice(0, 2000)) {
+      const entry = { old: new URL(e.old, origin).href, expect: e.expect ? new URL(e.expect, origin).href : null }
+      const res = await get(entry.old)
+      if (res.status === 0 && !res.chain.length) {
+        redirects.unreachable.push(entry.old)
+        continue
+      }
+      redirects.checked++
+      let target = null
+      if (res.status === 200 && res.chain.length && res.body) {
+        const ex = extract(res.body, res.finalUrl)
+        target = { noindex: isNoindex([ex.robots, res.headers['x-robots-tag']].filter(Boolean).join(', ')), canonical: ex.canonicals[0] || null }
+      }
+      const found = gradeRedirect(entry, res, target, { origin, local: LOCAL })
+      if (!found.length) redirects.ok++
+      for (const f of found) {
+        add(f.sev, f.id, f.msg, entry.old)
+        redirects.problems.push({ old: entry.old, expect: entry.expect, final: res.finalUrl, status: res.status, hops: res.chain.map((h) => h.status), ...f })
+      }
+    }
+    if (redirectList.length > 2000) redirects.capped = 2000
+  }
+
   const pagesOut = results.map((p) => ({
     url: p.url,
     finalUrl: p.finalUrl,
@@ -751,6 +798,7 @@ async function main() {
     icons: iconInfo,
     pages: pagesOut,
     linksChecked: checkedLinks,
+    redirects,
     linksUnreachable: unreachable,
     crawl: graph,
     drift,
@@ -871,6 +919,15 @@ function report(r) {
   for (const f of r.findings) L.push(`- **${f.sev}** \`${f.id}\` ${f.msg}${f.url ? ` (${f.url})` : ''}`)
   if (r.crawl) L.push('', `Link graph: ${r.crawl.pages} pages reached from the home page${r.crawl.capped ? ` (stopped at --crawl ${r.crawl.limit})` : ''}, deepest ${r.crawl.maxDepth} clicks, ${r.crawl.orphans.length} sitemap URL(s) not linked from any reached page.`)
   if (r.linksUnreachable.length) L.push('', `Not graded: ${r.linksUnreachable.length} internal link(s) could not be fetched from here (network, not necessarily broken): ${r.linksUnreachable.slice(0, 5).join(', ')}${r.linksUnreachable.length > 5 ? ' …' : ''}.`)
+  if (r.redirects) {
+    const x = r.redirects
+    L.push('', '## Redirects', '', `${x.listed} old URL(s) listed${x.capped ? ` (first ${x.capped} checked)` : ''} · ${x.ok} of ${x.checked} redirect correctly · ${x.checked - x.ok} with problems (the \`redirect.*\` findings above)${x.unreachable.length ? ` · ${x.unreachable.length} could not be fetched from here and were not graded` : ''}`)
+    if (x.problems.length) {
+      L.push('', '| Old URL | Hops | Lands on | Problem |', '| --- | --- | --- | --- |')
+      for (const p of x.problems.slice(0, 100)) L.push(`| ${p.old} | ${p.hops.join(' → ') || 'none'} | ${p.final} (${p.status}) | \`${p.id}\` |`)
+      if (x.problems.length > 100) L.push('', `… and ${x.problems.length - 100} more in the JSON.`)
+    }
+  }
   if (r.drift) {
     const d = r.drift
     const regressions = r.findings.filter((f) => f.id.startsWith('drift.'))
