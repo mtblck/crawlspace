@@ -104,6 +104,7 @@ It's also in [mtblck/claude-marketplace](https://github.com/mtblck/claude-market
 | `/crawlspace:schema [url \| route] [type]` | Find, validate and write schema.org JSON-LD the way the stack does head content. |
 | `/crawlspace:social [url ...]` | Social cards and link previews: OG and Twitter tags on every page, the share image fetched and measured, and a picture of how the link unfurls on Slack, Facebook, X, LinkedIn and iMessage. |
 | `/crawlspace:keywords [url \| topic] [competitors]` | Keyword research without paid tools: queries from the site, search results, People Also Ask, forums and Search Console data, one primary query per page, cannibalisation and gaps, `keywords.md` and a CSV. |
+| `/crawlspace:links [url]` | Internal linking plan from the real link graph: orphans, buried pages, pages with one link or none, vague anchors, missing hubs, and specific links to add (source, anchor, target), using the keyword map when there is one. |
 | `/crawlspace:ai-search [url]` | AI crawler access, pages that work without JavaScript, quotable content, entity clarity, llms.txt, each call labelled documented or judgement. |
 
 Claude also picks them up from their descriptions: "why isn't this page indexed?", "check how this
@@ -118,7 +119,7 @@ GET requests to the site it's pointed at.
 ```
 node scripts/seo-check.mjs --url https://example.com --max 30 --md seo.md --json seo.json
 node scripts/seo-check.mjs --url http://localhost:4173   # a local build
-node scripts/seo-check.mjs --url https://example.com --crawl 300   # also walk links: depth, orphans, URL hygiene
+node scripts/seo-check.mjs --url https://example.com --crawl 300   # also walk links: depth, orphans, inbound links, anchors, URL hygiene
 ```
 
 It reads robots.txt (RFC 9309 matching, with an access table for search engines,

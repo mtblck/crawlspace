@@ -69,7 +69,8 @@ page: it reports click depth (pages more than three clicks deep), orphans
 tracking parameters, mixed trailing slashes, http links on an https site). It
 only follows links in the raw HTML, so a page reachable only through JavaScript
 counts as an orphan: that is the point, since crawlers that don't render can't
-find it either.
+find it either. The JSON's `crawl.nodes` has inbound links and anchors per page;
+for a plan of links to add, hand off to the `links` skill.
 
 If `${CLAUDE_PLUGIN_ROOT}` isn't set, the script is `scripts/seo-check.mjs` in this
 plugin's folder (two levels above this skill). It needs Node 18+ and nothing else;

@@ -63,7 +63,8 @@ has no competitive comparison.
 - **Trust:** who wrote or made it and why they're credible, dates, sources for
   claims, contact or about links.
 - **Internal links:** which pages should link here with what anchor text, and
-  which pages this one should link to.
+  which pages this one should link to (the `links` skill measures the whole
+  site's graph and plans links across it).
 - **Structured data:** the type the page is eligible for (hand the markup to the
   `schema` skill).
 - **Rendering:** the title, description, canonical and main content are in the
