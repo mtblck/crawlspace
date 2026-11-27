@@ -72,6 +72,26 @@ counts as an orphan: that is the point, since crawlers that don't render can't
 find it either. The JSON's `crawl.nodes` has inbound links and anchors per page;
 for a plan of links to add, hand off to the `links` skill.
 
+When an earlier run's JSON exists (a previous audit, the run before a fix or a
+deploy, a production run to compare a local build against), add
+`--baseline <earlier>.json`. It fetches every baseline page again and grades what
+regressed as `drift.*` findings: a page that stopped answering 200, became
+noindex, moved its canonical away from itself or lost its share image,
+structured data types or most of its words, a search crawler newly blocked, a
+sitemap that shrank. Other differences (titles, descriptions, H1s) are listed
+under "Changes to confirm are intended", not graded. Pages match by path, so a
+production baseline works against a local build.
+
+**After a migration or a URL change** (new domain, new routes, a CMS move), get
+the old URLs: the old sitemap (from git history or the Wayback Machine), a Search
+Console Pages export, or the old route list in the code. Put them in a file,
+with `old,new` per line when the new home of each is known, and add
+`--redirects old-urls.csv`. Each old URL must 301/308 in one hop to a live,
+indexable page that is its own canonical; the `redirect.*` findings say which
+don't. Against a local build, list old *paths*, since absolute URLs are fetched
+as given. Then check the redirect config in the code (`vercel.json`,
+`next.config`, `_redirects`, the server) for the cause.
+
 If `${CLAUDE_PLUGIN_ROOT}` isn't set, the script is `scripts/seo-check.mjs` in this
 plugin's folder (two levels above this skill). It needs Node 18+ and nothing else;
 it renders pages with Playwright when Playwright is installed (it is in Claude's
@@ -81,8 +101,11 @@ Also, when you can:
 - **Core Web Vitals:** run the `pr-review:performance` skill's Lighthouse step or
   `npx @lhci/cli@0.15.1 collect` on the key templates. Field data (CrUX, Search
   Console) beats lab data; say which you have.
-- **Search Console / analytics:** only if the user provides exports or access.
-  Never claim index coverage or traffic numbers you didn't see.
+- **Search Console / analytics:** only if the user provides exports or a Search
+  Console MCP server is connected; then run the `search-console` skill's analysis
+  with `--checker` pointing at this run, so P1/P2 findings on pages that already
+  get impressions rank first. Never claim index coverage or traffic numbers you
+  didn't see.
 - **Structured data:** the script parses JSON-LD and lists types; the `schema`
   skill in this plugin goes deeper.
 
@@ -143,8 +166,8 @@ repo, unless asked):
 4. **What wasn't checked** (field CWV, Search Console, backlinks, live host
    checks on a local build) and how to check it, plus the "Set up once per
    site" items from `checklist.md` that aren't confirmed done.
-5. **Next run:** the exact command to re-run the checker, so the score can be
-   compared.
+5. **Next run:** the exact command to re-run the checker with
+   `--baseline seo-live.json`, so the next run shows what changed.
 
 Then make the **launch checklist**, an interactive page where the owner ticks
 off fixes and set-up steps and leaves notes:
@@ -182,6 +205,7 @@ Lead the reply with the summary, then link the report and the checklist.
    current options and their maintenance before picking one.
    Propose it with its cost before doing it; it changes the build.
 3. Build and run the repo's checks after each change. Re-run the checker against
-   a fresh build and show the finding gone. "Should be fixed" isn't a result.
+   a fresh build with `--baseline` set to the run before the fix, and show the
+   finding gone and no `drift.*` regressions. "Should be fixed" isn't a result.
 4. Open a PR in the repo's normal way, with the before/after checker summary in
    the description.
