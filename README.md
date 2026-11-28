@@ -198,6 +198,7 @@ save into the page; re-runs carry ticks over and move fixed items to their own s
 skills/      audit, page, schema, social, keywords, ai-search (each a SKILL.md)
 scripts/     seo-check.mjs (the checker), social-preview.mjs, checklist.mjs, lib/, test/
 templates/   checklist.html and an example checklist.json
+brand/       Crawlspace's own brand kit (logos, colours, type, guidelines), made with brand-kit
 ```
 
 Test the checker with `node --test "scripts/test/*.test.mjs"`: it serves a fixture site with
@@ -224,4 +225,5 @@ What changed in each release is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-[MIT](LICENSE) © Matt Black
+[MIT](LICENSE) © Matt Black. The Crawlspace name and logos, and everything in [`brand/`](brand/), are not covered by the MIT licence; see
+[`brand/LICENSE`](brand/LICENSE) and [`brand/TRADEMARKS.md`](brand/TRADEMARKS.md).
