@@ -1,0 +1,122 @@
+{
+  "name": "Crawlspace",
+  "tagline": "Find out where crawlers get stuck.",
+  "about": "Crawlspace is a free set of SEO skills for Claude Code. It walks a site the way a crawler does, fetching every page raw and rendered, reads the code that made them, and proves each finding.\n\nThe mark is a crawl map: the root page and two links, with the one where the crawler got stuck flagged in amber.",
+  "construction": "On a 256 grid: an equilateral triangle of side 160 with its apex at (128, 52), nodes of radius 30 on its corners and two edges 16 wide; the base is left open, because a crawl map is a tree.",
+  "website": "mattblack.space/skills/crawlspace",
+  "contact": {
+    "name": "Your Name",
+    "role": "Role",
+    "email": "you@mattblack.space"
+  },
+  "colors": [
+    {
+      "name": "Blueprint",
+      "hex": "#0b1424",
+      "role": "dark",
+      "usage": "The page, the brand field and the icon tile: Crawlspace lives on Blueprint first."
+    },
+    {
+      "name": "Survey",
+      "hex": "#007a8a",
+      "role": "primary",
+      "usage": "The mark and brand-coloured text on light grounds."
+    },
+    {
+      "name": "Flag",
+      "hex": "#f2b84b",
+      "role": "accent",
+      "usage": "The flagged node and one highlight per layout (a finding, a call to action); never body text on light grounds."
+    },
+    {
+      "name": "Tracing",
+      "hex": "#eef3f9",
+      "role": "paper",
+      "usage": "Light pages, and the wordmark on Blueprint."
+    },
+    {
+      "name": "Signal",
+      "hex": "#5ad1e6",
+      "role": "support",
+      "usage": "The mark on Blueprint, and primary buttons in both themes (with Blueprint labels)."
+    }
+  ],
+  "type": {
+    "display": {
+      "family": "Space Grotesk",
+      "weight": 700
+    },
+    "text": {
+      "family": "Space Grotesk",
+      "weight": 400
+    }
+  },
+  "logos": {
+    "mark": {
+      "file": "mark.svg",
+      "dark": "mark-dark.svg",
+      "minWidth": 16
+    },
+    "horizontal": {
+      "file": "logo-horizontal.svg",
+      "dark": "logo-horizontal-dark.svg",
+      "minWidth": 110
+    },
+    "stacked": {
+      "file": "logo-stacked.svg",
+      "dark": "logo-stacked-dark.svg",
+      "minWidth": 64
+    }
+  },
+  "icon": {
+    "file": "mark-dark.svg",
+    "background": "#0b1424",
+    "favicon": "favicon.svg"
+  },
+  "social": {
+    "background": "#eef3f9"
+  },
+  "palette": {
+    "brand": "#5ad1e6"
+  },
+  "templates": {
+    "background": "#0b1424"
+  },
+  "portfolio": {
+    "cover": "portfolio/cover.svg",
+    "mobile": "portfolio/cover-mobile.svg",
+    "alt": "A site map drawn on blueprint paper, its pages joined by dashed lines, with a cyan trail running from the root down every branch until it stops at one page ringed in amber, and the two pages behind it still grey and unreached."
+  },
+  "direction": {
+    "words": [
+      "technical",
+      "exact",
+      "calm"
+    ],
+    "pairs": {
+      "tone": "serious",
+      "era": "modern",
+      "volume": "quiet",
+      "finish": "engineered"
+    },
+    "references": {
+      "like": [
+        "the Crawl Map site"
+      ],
+      "avoid": [
+        "magnifying glasses",
+        "rising bar charts",
+        "search-bar logos"
+      ]
+    },
+    "lives": "web",
+    "weirdness": 2
+  },
+  "legal": {
+    "owner": "mtblck",
+    "contact": "github.com/mtblck/crawlspace"
+  },
+  "clearSpace": 0.25,
+  "exports": "all",
+  "out": "dist"
+}
